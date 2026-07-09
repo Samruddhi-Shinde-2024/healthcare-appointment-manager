@@ -11,38 +11,46 @@ The objective is to build maintainable, scalable, secure, and production-ready s
 ## Tech Stack (Must Not Change)
 
 Frontend
+
 - React
 - TypeScript
 - Vite
 - Tailwind CSS
 
 Backend
+
 - Node.js
 - Express
 - TypeScript
 
 Database
+
 - PostgreSQL
 - Prisma ORM
 
 Caching & Queue
+
 - Redis
 - BullMQ
 
 Authentication
+
 - JWT
 - Role-Based Access Control (Admin, Doctor, Patient)
 
 AI
+
 - OpenAI API for:
   - Pre-visit symptom summary
   - Post-visit patient-friendly summary
 
 Notifications
+
 - Nodemailer
 - Google Calendar API
 
 Deployment
+
 - Frontend: Vercel
 - Backend: Render
 - Database: Neon PostgreSQL
@@ -55,6 +63,7 @@ Deployment
 Do NOT replace or redesign the approved architecture.
 
 Do NOT introduce:
+
 - Spring Boot
 - Java
 - NestJS
