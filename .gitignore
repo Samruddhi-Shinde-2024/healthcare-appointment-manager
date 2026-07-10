@@ -19,8 +19,6 @@ Thumbs.db
 client/dist/
 server/dist/
 shared/dist/
-server/prisma/migrations/
-
 *.tsbuildinfo
 node_modules/
 .pnpm-store/

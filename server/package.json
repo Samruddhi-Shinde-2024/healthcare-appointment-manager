@@ -9,9 +9,13 @@
     "dev": "tsx watch src/server.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "prisma db seed",
     "prisma:validate": "prisma validate",
     "start": "node dist/server.js",
     "typecheck": "tsc -b --pretty false"
+  },
+  "prisma": {
+    "seed": "pnpm exec tsx src/database/seed.ts"
   },
   "dependencies": {
     "@healthcare/shared": "workspace:*",
