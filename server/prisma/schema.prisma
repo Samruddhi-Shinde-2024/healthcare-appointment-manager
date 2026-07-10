@@ -75,13 +75,6 @@ enum NotificationChannel {
   IN_APP
 }
 
-enum DeliveryStatus {
-  PENDING
-  SENT
-  READ
-  FAILED
-}
-
 enum CalendarProvider {
   GOOGLE
 }
@@ -93,38 +86,102 @@ enum CalendarSyncStatus {
   DELETED
 }
 
+enum RefreshTokenStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  READ
+  FAILED
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum LLMSummaryStatus {
+  COMPLETED
+  FAILED
+  FALLBACK
+}
+
+enum BackgroundJobType {
+  EMAIL_DELIVERY
+  MEDICATION_REMINDER
+  CALENDAR_SYNC
+  LLM_SUMMARY
+  NOTIFICATION_DELIVERY
+  CLEANUP
+}
+
+enum BackgroundJobStatus {
+  QUEUED
+  ACTIVE
+  COMPLETED
+  RETRYING
+  FAILED
+  CANCELLED
+  DEAD_LETTER
+}
+
 model User {
-  id                   String                   @id @default(uuid()) @db.Uuid
-  email                String                   @unique
-  passwordHash         String
-  role                 UserRole
-  isActive             Boolean                  @default(true)
-  createdAt            DateTime                 @default(now())
-  updatedAt            DateTime                 @updatedAt
-  createdBy            String?                  @db.Uuid
-  updatedBy            String?                  @db.Uuid
-  patientProfile       PatientProfile?
-  doctorProfile        DoctorProfile?
-  adminProfile         AdminProfile?
-  notifications        Notification[]
-  appointmentRequests  AppointmentIdempotency[]
-  auditLogs            AuditLog[]               @relation("AuditActor")
+  id                  String                   @id @default(uuid()) @db.Uuid
+  email               String                   @unique
+  passwordHash        String
+  role                UserRole
+  isActive            Boolean                  @default(true)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  createdBy           String?                  @db.Uuid
+  updatedBy           String?                  @db.Uuid
+  patientProfile      PatientProfile?
+  doctorProfile       DoctorProfile?
+  adminProfile        AdminProfile?
+  refreshTokens       RefreshToken[]
+  calendarConnections CalendarConnection[]
+  notifications       Notification[]
+  appointmentRequests AppointmentIdempotency[]
+  backgroundJobs      BackgroundJob[]
+  auditLogs           AuditLog[]               @relation("AuditActor")
 
   @@index([role, isActive])
 }
 
+model RefreshToken {
+  id        String             @id @default(uuid()) @db.Uuid
+  userId    String             @db.Uuid
+  tokenHash String             @unique
+  status    RefreshTokenStatus @default(ACTIVE)
+  expiresAt DateTime           @db.Timestamptz(3)
+  revokedAt DateTime?          @db.Timestamptz(3)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  createdBy String?            @db.Uuid
+  updatedBy String?            @db.Uuid
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([expiresAt])
+}
+
 model PatientProfile {
-  id               String                @id @default(uuid()) @db.Uuid
-  userId           String                @unique @db.Uuid
-  dateOfBirth      DateTime?             @db.Date
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String               @unique @db.Uuid
+  dateOfBirth      DateTime?            @db.Date
   gender           Gender?
   emergencyContact String?
   medicalNotes     String?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-  createdBy        String?               @db.Uuid
-  updatedBy        String?               @db.Uuid
-  user             User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  createdBy        String?              @db.Uuid
+  updatedBy        String?              @db.Uuid
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   appointments     Appointment[]
   reminders        MedicationReminder[]
 
@@ -156,20 +213,20 @@ model DoctorSpecialization {
 }
 
 model DoctorProfile {
-  id               String                 @id @default(uuid()) @db.Uuid
-  userId           String                 @unique @db.Uuid
-  specializationId String                 @db.Uuid
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String               @unique @db.Uuid
+  specializationId String               @db.Uuid
   experienceYears  Int
-  consultationFee  Decimal                @db.Decimal(10, 2)
+  consultationFee  Decimal              @db.Decimal(10, 2)
   slotDuration     Int
   bio              String?
-  isActive         Boolean                @default(true)
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-  createdBy        String?                @db.Uuid
-  updatedBy        String?                @db.Uuid
-  user             User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
-  specialization   DoctorSpecialization   @relation(fields: [specializationId], references: [id], onDelete: Restrict)
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  createdBy        String?              @db.Uuid
+  updatedBy        String?              @db.Uuid
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  specialization   DoctorSpecialization @relation(fields: [specializationId], references: [id], onDelete: Restrict)
   availabilities   DoctorAvailability[]
   leaves           DoctorLeave[]
   appointments     Appointment[]
@@ -212,31 +269,33 @@ model DoctorLeave {
 }
 
 model Appointment {
-  id              String                   @id @default(uuid()) @db.Uuid
-  doctorId        String                   @db.Uuid
-  patientId       String                   @db.Uuid
-  startTime       DateTime                 @db.Timestamptz(3)
-  endTime         DateTime                 @db.Timestamptz(3)
-  status          AppointmentStatus
-  holdExpiresAt   DateTime?                @db.Timestamptz(3)
+  id                 String                  @id @default(uuid()) @db.Uuid
+  doctorId           String                  @db.Uuid
+  patientId          String                  @db.Uuid
+  startTime          DateTime                @db.Timestamptz(3)
+  endTime            DateTime                @db.Timestamptz(3)
+  status             AppointmentStatus
+  holdExpiresAt      DateTime?               @db.Timestamptz(3)
   cancellationReason String?
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
-  createdBy       String?                  @db.Uuid
-  updatedBy       String?                  @db.Uuid
-  doctor          DoctorProfile            @relation(fields: [doctorId], references: [id], onDelete: Restrict)
-  patient         PatientProfile           @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  symptoms        SymptomSubmission?
-  summaries       LLMSummary[]
-  prescription    Prescription?
-  notifications   Notification[]
-  emailLogs       EmailLog[]
-  calendarEvent   CalendarEvent?
-  idempotency     AppointmentIdempotency?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  createdBy          String?                 @db.Uuid
+  updatedBy          String?                 @db.Uuid
+  doctor             DoctorProfile           @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  patient            PatientProfile          @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  symptoms           SymptomSubmission?
+  summaries          LLMSummary[]
+  prescription       Prescription?
+  notifications      Notification[]
+  emailLogs          EmailLog[]
+  calendarEvent      CalendarEvent?
+  idempotency        AppointmentIdempotency?
+  backgroundJobs     BackgroundJob[]
 
   @@unique([doctorId, startTime])
   @@index([doctorId, startTime, status])
   @@index([patientId, startTime, status])
+  @@index([status, holdExpiresAt])
 }
 
 model AppointmentIdempotency {
@@ -258,125 +317,206 @@ model AppointmentIdempotency {
 }
 
 model SymptomSubmission {
-  id            String      @id @default(uuid()) @db.Uuid
-  appointmentId String      @unique @db.Uuid
-  symptoms      String
-  duration      String?
-  severity      String?
+  id              String      @id @default(uuid()) @db.Uuid
+  appointmentId   String      @unique @db.Uuid
+  symptoms        String
+  duration        String?
+  severity        String?
   additionalNotes String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  createdBy     String?     @db.Uuid
-  updatedBy     String?     @db.Uuid
-  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  createdBy       String?     @db.Uuid
+  updatedBy       String?     @db.Uuid
+  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
 }
 
 model LLMSummary {
-  id                 String          @id @default(uuid()) @db.Uuid
-  appointmentId      String          @db.Uuid
+  id                 String           @id @default(uuid()) @db.Uuid
+  appointmentId      String           @db.Uuid
   type               LLMSummaryType
+  status             LLMSummaryStatus @default(COMPLETED)
   content            String
   urgencyLevel       UrgencyLevel?
-  model              String
-  promptVersion      String
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-  createdBy          String?         @db.Uuid
-  updatedBy          String?         @db.Uuid
-  appointment        Appointment     @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  chiefComplaint     String?
+  suggestedQuestions Json?
+  medicationSchedule Json?
+  followUpGuidance   String?
+  model              String?
+  promptVersion      String?
+  promptInputHash    String?
+  failureReason      String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  createdBy          String?          @db.Uuid
+  updatedBy          String?          @db.Uuid
+  appointment        Appointment      @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  backgroundJobs     BackgroundJob[]
 
-  @@index([appointmentId, type])
+  @@unique([appointmentId, type])
+  @@index([appointmentId, status])
 }
 
 model Prescription {
-  id             String               @id @default(uuid()) @db.Uuid
-  appointmentId  String               @unique @db.Uuid
-  clinicalNotes  String
-  medicines      Json
-  doctorNotes    String?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  createdBy      String?              @db.Uuid
-  updatedBy      String?              @db.Uuid
-  appointment    Appointment          @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
-  reminders      MedicationReminder[]
+  id            String               @id @default(uuid()) @db.Uuid
+  appointmentId String               @unique @db.Uuid
+  clinicalNotes String
+  medicines     Json
+  doctorNotes   String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  createdBy     String?              @db.Uuid
+  updatedBy     String?              @db.Uuid
+  appointment   Appointment          @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  reminders     MedicationReminder[]
 }
 
 model MedicationReminder {
-  id             String         @id @default(uuid()) @db.Uuid
-  prescriptionId String         @db.Uuid
-  patientId      String         @db.Uuid
-  scheduledAt    DateTime       @db.Timestamptz(3)
-  status         ReminderStatus @default(PENDING)
-  retryCount     Int            @default(0)
-  sentAt         DateTime?      @db.Timestamptz(3)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  createdBy      String?        @db.Uuid
-  updatedBy      String?        @db.Uuid
-  prescription   Prescription   @relation(fields: [prescriptionId], references: [id], onDelete: Restrict)
-  patient        PatientProfile @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  id             String          @id @default(uuid()) @db.Uuid
+  prescriptionId String          @db.Uuid
+  patientId      String          @db.Uuid
+  scheduledAt    DateTime        @db.Timestamptz(3)
+  status         ReminderStatus  @default(PENDING)
+  retryCount     Int             @default(0)
+  sentAt         DateTime?       @db.Timestamptz(3)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  createdBy      String?         @db.Uuid
+  updatedBy      String?         @db.Uuid
+  prescription   Prescription    @relation(fields: [prescriptionId], references: [id], onDelete: Restrict)
+  patient        PatientProfile  @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  backgroundJobs BackgroundJob[]
 
   @@index([status, scheduledAt])
   @@index([patientId, scheduledAt])
 }
 
 model Notification {
-  id            String              @id @default(uuid()) @db.Uuid
-  recipientId   String              @db.Uuid
-  appointmentId String?             @db.Uuid
-  type          NotificationType
-  channel       NotificationChannel
-  status        DeliveryStatus      @default(PENDING)
-  title         String
-  message       String
-  readAt        DateTime?           @db.Timestamptz(3)
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  createdBy     String?             @db.Uuid
-  updatedBy     String?             @db.Uuid
-  recipient     User                @relation(fields: [recipientId], references: [id], onDelete: Restrict)
-  appointment   Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  id             String              @id @default(uuid()) @db.Uuid
+  recipientId    String              @db.Uuid
+  appointmentId  String?             @db.Uuid
+  type           NotificationType
+  channel        NotificationChannel
+  status         NotificationStatus  @default(PENDING)
+  title          String
+  message        String
+  readAt         DateTime?           @db.Timestamptz(3)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  createdBy      String?             @db.Uuid
+  updatedBy      String?             @db.Uuid
+  recipient      User                @relation(fields: [recipientId], references: [id], onDelete: Restrict)
+  appointment    Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  backgroundJobs BackgroundJob[]
 
   @@index([recipientId, status])
   @@index([appointmentId])
 }
 
 model EmailLog {
-  id            String         @id @default(uuid()) @db.Uuid
-  appointmentId String?        @db.Uuid
-  recipient     String
-  templateType  String
-  status        DeliveryStatus @default(PENDING)
-  retryCount    Int            @default(0)
-  nextRetryAt   DateTime?      @db.Timestamptz(3)
-  sentAt        DateTime?      @db.Timestamptz(3)
-  failureReason String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  createdBy     String?        @db.Uuid
-  updatedBy     String?        @db.Uuid
-  appointment   Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  id             String              @id @default(uuid()) @db.Uuid
+  appointmentId  String?             @db.Uuid
+  recipient      String
+  templateType   String
+  status         EmailDeliveryStatus @default(PENDING)
+  retryCount     Int                 @default(0)
+  nextRetryAt    DateTime?           @db.Timestamptz(3)
+  sentAt         DateTime?           @db.Timestamptz(3)
+  failureReason  String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  createdBy      String?             @db.Uuid
+  updatedBy      String?             @db.Uuid
+  appointment    Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  backgroundJobs BackgroundJob[]
 
   @@index([status, nextRetryAt])
   @@index([appointmentId])
 }
 
 model CalendarEvent {
-  id                 String             @id @default(uuid()) @db.Uuid
-  appointmentId      String             @unique @db.Uuid
-  provider           CalendarProvider   @default(GOOGLE)
-  externalEventId    String
-  syncStatus         CalendarSyncStatus @default(PENDING)
-  lastSynchronizedAt DateTime?          @db.Timestamptz(3)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  createdBy          String?            @db.Uuid
-  updatedBy          String?            @db.Uuid
-  appointment        Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  id                   String              @id @default(uuid()) @db.Uuid
+  appointmentId        String              @unique @db.Uuid
+  calendarConnectionId String?             @db.Uuid
+  provider             CalendarProvider    @default(GOOGLE)
+  externalEventId      String
+  syncStatus           CalendarSyncStatus  @default(PENDING)
+  lastSynchronizedAt   DateTime?           @db.Timestamptz(3)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  createdBy            String?             @db.Uuid
+  updatedBy            String?             @db.Uuid
+  appointment          Appointment         @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  calendarConnection   CalendarConnection? @relation(fields: [calendarConnectionId], references: [id], onDelete: SetNull)
+  backgroundJobs       BackgroundJob[]
 
   @@unique([provider, externalEventId])
   @@index([syncStatus])
+  @@index([calendarConnectionId])
+}
+
+model CalendarConnection {
+  id                    String           @id @default(uuid()) @db.Uuid
+  userId                String           @db.Uuid
+  provider              CalendarProvider @default(GOOGLE)
+  providerAccountEmail  String
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String
+  scopes                String[]
+  expiresAt             DateTime?        @db.Timestamptz(3)
+  revokedAt             DateTime?        @db.Timestamptz(3)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  createdBy             String?          @db.Uuid
+  updatedBy             String?          @db.Uuid
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  calendarEvents        CalendarEvent[]
+
+  @@unique([userId, provider])
+  @@index([provider, providerAccountEmail])
+}
+
+model BackgroundJob {
+  id                   String              @id @default(uuid()) @db.Uuid
+  type                 BackgroundJobType
+  status               BackgroundJobStatus @default(QUEUED)
+  queueName            String
+  jobKey               String?
+  payload              Json
+  attempts             Int                 @default(0)
+  maxAttempts          Int                 @default(3)
+  scheduledFor         DateTime?           @db.Timestamptz(3)
+  processedAt          DateTime?           @db.Timestamptz(3)
+  completedAt          DateTime?           @db.Timestamptz(3)
+  failedAt             DateTime?           @db.Timestamptz(3)
+  lastError            String?
+  actorId              String?             @db.Uuid
+  appointmentId        String?             @db.Uuid
+  notificationId       String?             @db.Uuid
+  emailLogId           String?             @db.Uuid
+  medicationReminderId String?             @db.Uuid
+  calendarEventId      String?             @db.Uuid
+  llmSummaryId         String?             @db.Uuid
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  createdBy            String?             @db.Uuid
+  updatedBy            String?             @db.Uuid
+  actor                User?               @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  appointment          Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  notification         Notification?       @relation(fields: [notificationId], references: [id], onDelete: Restrict)
+  emailLog             EmailLog?           @relation(fields: [emailLogId], references: [id], onDelete: Restrict)
+  medicationReminder   MedicationReminder? @relation(fields: [medicationReminderId], references: [id], onDelete: Restrict)
+  calendarEvent        CalendarEvent?      @relation(fields: [calendarEventId], references: [id], onDelete: Restrict)
+  llmSummary           LLMSummary?         @relation(fields: [llmSummaryId], references: [id], onDelete: Restrict)
+
+  @@unique([queueName, jobKey])
+  @@index([type, status])
+  @@index([status, scheduledFor])
+  @@index([appointmentId])
+  @@index([notificationId])
+  @@index([emailLogId])
+  @@index([medicationReminderId])
+  @@index([calendarEventId])
+  @@index([llmSummaryId])
 }
 
 model AuditLog {
