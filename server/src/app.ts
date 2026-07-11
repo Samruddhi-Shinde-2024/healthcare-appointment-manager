@@ -3,10 +3,13 @@ import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
 
+import { authRouter } from './auth/routes.js';
 import { environment } from './config/environment.js';
+import { doctorsRouter } from './doctors/routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFound } from './middleware/not-found.js';
 import { requestContext } from './middleware/request-context.js';
+import { patientsRouter } from './patients/routes.js';
 
 export function createApplication(): Express {
   const application = express();
@@ -24,6 +27,10 @@ export function createApplication(): Express {
   application.use(compression());
   application.use(express.json({ limit: '1mb' }));
   application.use(express.urlencoded({ extended: false, limit: '1mb' }));
+
+  application.use('/auth', authRouter);
+  application.use('/admin/doctors', doctorsRouter);
+  application.use('/admin/patients', patientsRouter);
 
   application.use(notFound);
   application.use(errorHandler);
