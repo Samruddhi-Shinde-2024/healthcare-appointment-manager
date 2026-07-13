@@ -7,13 +7,16 @@ import { authRouter } from './auth/routes.js';
 import { aiRouter } from './ai/routes.js';
 import { appointmentsRouter } from './appointments/routes.js';
 import { adminAvailabilityRouter, doctorAvailabilityRouter } from './availability/routes.js';
+import { calendarRouter } from './calendar/routes.js';
 import { environment } from './config/environment.js';
 import { doctorsRouter } from './doctors/routes.js';
+import { backgroundJobsRouter } from './jobs/routes.js';
 import { leaveRouter } from './leave/routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFound } from './middleware/not-found.js';
 import { requestContext } from './middleware/request-context.js';
 import { patientsRouter } from './patients/routes.js';
+import { medicationRemindersRouter } from './reminders/routes.js';
 
 export function createApplication(): Express {
   const application = express();
@@ -35,11 +38,14 @@ export function createApplication(): Express {
   application.use('/auth', authRouter);
   application.use('/appointments', appointmentsRouter);
   application.use('/appointments', aiRouter);
+  application.use('/calendar', calendarRouter);
   application.use('/doctors', doctorAvailabilityRouter);
   application.use('/doctors/leave', leaveRouter);
   application.use('/admin/availability', adminAvailabilityRouter);
   application.use('/admin/doctors', doctorsRouter);
+  application.use('/admin/jobs', backgroundJobsRouter);
   application.use('/admin/patients', patientsRouter);
+  application.use('/medication-reminders', medicationRemindersRouter);
 
   application.use(notFound);
   application.use(errorHandler);

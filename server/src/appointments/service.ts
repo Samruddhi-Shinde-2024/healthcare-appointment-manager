@@ -4,9 +4,11 @@ import type { AuthenticatedUser } from '../auth/types.js';
 import type { PaginationMeta } from '../common/pagination.js';
 import { toPaginationMeta, toPaginationOptions } from '../common/pagination.js';
 import type { AiService } from '../ai/service.js';
+import type { CalendarService } from '../calendar/service.js';
 import { logger } from '../config/logger.js';
 import type { EmailService } from '../email/service.js';
 import { ApplicationError } from '../errors/application-error.js';
+import type { BackgroundJobsService } from '../jobs/service.js';
 import type { NotificationsService } from '../notifications/service.js';
 import type { AppointmentRecord, AppointmentsRepository } from './repository.js';
 import type {
@@ -78,6 +80,8 @@ export class AppointmentsService {
     private readonly emailService?: EmailService,
     private readonly notificationsService?: NotificationsService,
     private readonly aiService?: AiService,
+    private readonly backgroundJobsService?: BackgroundJobsService,
+    private readonly calendarService?: CalendarService,
   ) {}
 
   public async book(
@@ -310,6 +314,25 @@ export class AppointmentsService {
       this.runSideEffect('pre-visit AI summary', appointment.id, () =>
         this.aiService?.generatePreVisitSummary(appointment.id, actor),
       ),
+      this.runSideEffect('pre-visit AI summary job', appointment.id, () =>
+        this.backgroundJobsService?.enqueueAiSummary(appointment.id, actor.id, 'PRE_VISIT'),
+      ),
+      this.runSideEffect('appointment booked email job', appointment.id, () =>
+        this.backgroundJobsService?.enqueueEmailDelivery(appointment.id, actor.id, 'APPOINTMENT_BOOKED'),
+      ),
+      this.runSideEffect('appointment reminder job', appointment.id, () =>
+        this.backgroundJobsService?.enqueueAppointmentReminder(
+          appointment.id,
+          actor.id,
+          reminderScheduleForAppointment(appointment.startTime),
+        ),
+      ),
+      this.runSideEffect('calendar event creation', appointment.id, () =>
+        this.calendarService?.createEventForAppointment(appointment, actor.id),
+      ),
+      this.runSideEffect('calendar creation job', appointment.id, () =>
+        this.backgroundJobsService?.enqueueCalendarSync(appointment.id, actor.id, 'CREATE'),
+      ),
     ]);
   }
 
@@ -323,6 +346,9 @@ export class AppointmentsService {
 
     await this.runSideEffect('post-visit AI summary', appointment.id, () =>
       this.aiService?.generatePostVisitSummary(appointment.id, actor),
+    );
+    await this.runSideEffect('post-visit AI summary job', appointment.id, () =>
+      this.backgroundJobsService?.enqueueAiSummary(appointment.id, actor.id, 'POST_VISIT'),
     );
   }
 
@@ -340,6 +366,22 @@ export class AppointmentsService {
       this.runSideEffect('appointment reminder notification', appointment.id, () =>
         this.notificationsService?.createAppointmentReminder(appointment, actor.id),
       ),
+      this.runSideEffect('appointment rescheduled email job', appointment.id, () =>
+        this.backgroundJobsService?.enqueueEmailDelivery(appointment.id, actor.id, 'APPOINTMENT_RESCHEDULED'),
+      ),
+      this.runSideEffect('appointment reminder job', appointment.id, () =>
+        this.backgroundJobsService?.enqueueAppointmentReminder(
+          appointment.id,
+          actor.id,
+          reminderScheduleForAppointment(appointment.startTime),
+        ),
+      ),
+      this.runSideEffect('calendar event update', appointment.id, () =>
+        this.calendarService?.updateEventForAppointment(appointment, actor.id),
+      ),
+      this.runSideEffect('calendar update job', appointment.id, () =>
+        this.backgroundJobsService?.enqueueCalendarSync(appointment.id, actor.id, 'UPDATE'),
+      ),
     ]);
   }
 
@@ -353,6 +395,15 @@ export class AppointmentsService {
       ),
       this.runSideEffect('appointment cancelled notification', appointment.id, () =>
         this.notificationsService?.createAppointmentCancelled(appointment, actor.id),
+      ),
+      this.runSideEffect('appointment cancelled email job', appointment.id, () =>
+        this.backgroundJobsService?.enqueueEmailDelivery(appointment.id, actor.id, 'APPOINTMENT_CANCELLED'),
+      ),
+      this.runSideEffect('calendar event deletion', appointment.id, () =>
+        this.calendarService?.deleteEventForAppointment(appointment, actor.id),
+      ),
+      this.runSideEffect('calendar deletion job', appointment.id, () =>
+        this.backgroundJobsService?.enqueueCalendarSync(appointment.id, actor.id, 'DELETE'),
       ),
     ]);
   }
@@ -372,4 +423,9 @@ export class AppointmentsService {
       });
     }
   }
+}
+
+function reminderScheduleForAppointment(startTime: Date): Date {
+  const reminderTime = new Date(startTime.getTime() - 24 * 60 * 60 * 1000);
+  return reminderTime.getTime() > Date.now() ? reminderTime : new Date();
 }
