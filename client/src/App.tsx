@@ -1,17 +1,36 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ToastProvider } from './context/ToastContext';
+import { AuthProvider } from './context/AuthContext';
+import { Router } from './Router';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: (failureCount, error) => {
+        // Don't retry on 401/403/404
+        if (
+          error instanceof Error &&
+          'status' in error &&
+          typeof (error as { status: unknown }).status === 'number'
+        ) {
+          const status = (error as { status: number }).status;
+          if (status === 401 || status === 403 || status === 404) return false;
+        }
+        return failureCount < 2;
+      },
+    },
+  },
+});
+
 export function App(): React.JSX.Element {
   return (
-    <main className="grid min-h-screen place-items-center px-6">
-      <section className="max-w-2xl text-center">
-        <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-brand-700">
-          Healthcare Appointment Manager
-        </p>
-        <h1 className="text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
-          Care coordination, built on a reliable foundation.
-        </h1>
-        <p className="mt-5 text-lg leading-8 text-slate-600">
-          The patient, doctor, and administration experiences will live here.
-        </p>
-      </section>
-    </main>
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <AuthProvider>
+          <Router />
+        </AuthProvider>
+      </ToastProvider>
+    </QueryClientProvider>
   );
 }

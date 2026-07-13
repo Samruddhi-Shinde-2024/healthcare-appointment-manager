@@ -11,10 +11,16 @@
   },
   "dependencies": {
     "@healthcare/shared": "workspace:*",
+    "@tanstack/react-query": "^5.101.2",
     "@vitejs/plugin-react": "^4.5.2",
-    "vite": "^6.3.5",
+    "date-fns": "^4.4.0",
+    "lucide-react": "^1.24.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.81.0",
+    "react-router-dom": "^7.18.1",
+    "vite": "^6.3.5",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.15.32",
