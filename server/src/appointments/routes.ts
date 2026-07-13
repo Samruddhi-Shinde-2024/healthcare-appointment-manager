@@ -3,7 +3,12 @@ import { Router, type Router as ExpressRouter } from 'express';
 
 import { authenticate, authorize } from '../auth/middleware.js';
 import { idParamsSchema, validateRequest } from '../common/validation.js';
+import { AiRepository } from '../ai/repository.js';
+import { AiService } from '../ai/service.js';
 import { prisma } from '../config/prisma.js';
+import { EmailService } from '../email/service.js';
+import { NotificationsRepository } from '../notifications/repository.js';
+import { NotificationsService } from '../notifications/service.js';
 import { AppointmentsController } from './controller.js';
 import { AppointmentsRepository } from './repository.js';
 import { AppointmentsService } from './service.js';
@@ -16,7 +21,17 @@ import {
 } from './validation.js';
 
 const appointmentsRepository = new AppointmentsRepository(prisma);
-const appointmentsService = new AppointmentsService(appointmentsRepository);
+const emailService = new EmailService(prisma);
+const notificationsRepository = new NotificationsRepository(prisma);
+const notificationsService = new NotificationsService(notificationsRepository);
+const aiRepository = new AiRepository(prisma);
+const aiService = new AiService(aiRepository);
+const appointmentsService = new AppointmentsService(
+  appointmentsRepository,
+  emailService,
+  notificationsService,
+  aiService,
+);
 const appointmentsController = new AppointmentsController(appointmentsService);
 const appointmentRoles: PrismaUserRole[] = [UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT];
 

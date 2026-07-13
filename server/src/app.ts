@@ -4,6 +4,7 @@ import express, { type Express } from 'express';
 import helmet from 'helmet';
 
 import { authRouter } from './auth/routes.js';
+import { aiRouter } from './ai/routes.js';
 import { appointmentsRouter } from './appointments/routes.js';
 import { adminAvailabilityRouter, doctorAvailabilityRouter } from './availability/routes.js';
 import { environment } from './config/environment.js';
@@ -33,6 +34,7 @@ export function createApplication(): Express {
 
   application.use('/auth', authRouter);
   application.use('/appointments', appointmentsRouter);
+  application.use('/appointments', aiRouter);
   application.use('/doctors', doctorAvailabilityRouter);
   application.use('/doctors/leave', leaveRouter);
   application.use('/admin/availability', adminAvailabilityRouter);

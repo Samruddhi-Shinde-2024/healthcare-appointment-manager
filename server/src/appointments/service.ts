@@ -3,7 +3,11 @@ import { AppointmentStatus, UserRole } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/types.js';
 import type { PaginationMeta } from '../common/pagination.js';
 import { toPaginationMeta, toPaginationOptions } from '../common/pagination.js';
+import type { AiService } from '../ai/service.js';
+import { logger } from '../config/logger.js';
+import type { EmailService } from '../email/service.js';
 import { ApplicationError } from '../errors/application-error.js';
+import type { NotificationsService } from '../notifications/service.js';
 import type { AppointmentRecord, AppointmentsRepository } from './repository.js';
 import type {
   AppointmentListQuery,
@@ -69,7 +73,12 @@ function isSerializableRetryFailure(error: unknown): boolean {
 }
 
 export class AppointmentsService {
-  public constructor(private readonly appointmentsRepository: AppointmentsRepository) {}
+  public constructor(
+    private readonly appointmentsRepository: AppointmentsRepository,
+    private readonly emailService?: EmailService,
+    private readonly notificationsService?: NotificationsService,
+    private readonly aiService?: AiService,
+  ) {}
 
   public async book(
     input: BookAppointmentInput,
@@ -89,6 +98,8 @@ export class AppointmentsService {
         endTime: input.endTime,
         actorId: actor.id,
       });
+
+      await this.afterAppointmentBooked(appointment, actor);
 
       return serializeAppointment(appointment);
     } catch (error) {
@@ -144,12 +155,14 @@ export class AppointmentsService {
       throw new ApplicationError('Cancelled appointments cannot be updated.', 409, 'APPOINTMENT_CANCELLED');
     }
 
-    return serializeAppointment(
-      await this.appointmentsRepository.updateStatus(id, {
+    const updatedAppointment = await this.appointmentsRepository.updateStatus(id, {
         status: input.status,
         actorId: actor.id,
-      }),
-    );
+      });
+
+    await this.afterAppointmentUpdated(updatedAppointment, actor);
+
+    return serializeAppointment(updatedAppointment);
   }
 
   public async reschedule(
@@ -172,16 +185,18 @@ export class AppointmentsService {
     }
 
     try {
-      return serializeAppointment(
-        await this.appointmentsRepository.reschedule({
+      const rescheduledAppointment = await this.appointmentsRepository.reschedule({
           appointmentId: appointment.id,
           doctorId: appointment.doctorId,
           patientId: appointment.patientId,
           startTime: input.startTime,
           endTime: input.endTime,
           actorId: actor.id,
-        }),
-      );
+        });
+
+      await this.afterAppointmentRescheduled(rescheduledAppointment, actor);
+
+      return serializeAppointment(rescheduledAppointment);
     } catch (error) {
       if (isPrismaConflict(error) || isSerializableRetryFailure(error)) {
         throw new ApplicationError('The selected appointment slot is already booked.', 409, 'SLOT_BOOKED');
@@ -210,12 +225,14 @@ export class AppointmentsService {
       );
     }
 
-    return serializeAppointment(
-      await this.appointmentsRepository.cancel(id, {
+    const cancelledAppointment = await this.appointmentsRepository.cancel(id, {
         cancellationReason: input.cancellationReason,
         actorId: actor.id,
-      }),
-    );
+      });
+
+    await this.afterAppointmentCancelled(cancelledAppointment, actor);
+
+    return serializeAppointment(cancelledAppointment);
   }
 
   private async resolvePatientIdForBooking(
@@ -274,5 +291,85 @@ export class AppointmentsService {
     }
 
     throw new ApplicationError('You are not allowed to access this appointment.', 403, 'FORBIDDEN');
+  }
+
+  private async afterAppointmentBooked(
+    appointment: AppointmentRecord,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    await Promise.all([
+      this.runSideEffect('appointment booked email', appointment.id, () =>
+        this.emailService?.sendAppointmentBooked(appointment, actor.id),
+      ),
+      this.runSideEffect('appointment booked notification', appointment.id, () =>
+        this.notificationsService?.createAppointmentBooked(appointment, actor.id),
+      ),
+      this.runSideEffect('appointment reminder notification', appointment.id, () =>
+        this.notificationsService?.createAppointmentReminder(appointment, actor.id),
+      ),
+      this.runSideEffect('pre-visit AI summary', appointment.id, () =>
+        this.aiService?.generatePreVisitSummary(appointment.id, actor),
+      ),
+    ]);
+  }
+
+  private async afterAppointmentUpdated(
+    appointment: AppointmentRecord,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    if (appointment.status !== AppointmentStatus.COMPLETED) {
+      return;
+    }
+
+    await this.runSideEffect('post-visit AI summary', appointment.id, () =>
+      this.aiService?.generatePostVisitSummary(appointment.id, actor),
+    );
+  }
+
+  private async afterAppointmentRescheduled(
+    appointment: AppointmentRecord,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    await Promise.all([
+      this.runSideEffect('appointment rescheduled email', appointment.id, () =>
+        this.emailService?.sendAppointmentRescheduled(appointment, actor.id),
+      ),
+      this.runSideEffect('appointment rescheduled notification', appointment.id, () =>
+        this.notificationsService?.createAppointmentRescheduled(appointment, actor.id),
+      ),
+      this.runSideEffect('appointment reminder notification', appointment.id, () =>
+        this.notificationsService?.createAppointmentReminder(appointment, actor.id),
+      ),
+    ]);
+  }
+
+  private async afterAppointmentCancelled(
+    appointment: AppointmentRecord,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    await Promise.all([
+      this.runSideEffect('appointment cancelled email', appointment.id, () =>
+        this.emailService?.sendAppointmentCancelled(appointment, actor.id),
+      ),
+      this.runSideEffect('appointment cancelled notification', appointment.id, () =>
+        this.notificationsService?.createAppointmentCancelled(appointment, actor.id),
+      ),
+    ]);
+  }
+
+  private async runSideEffect<T>(
+    label: string,
+    appointmentId: string,
+    operation: () => Promise<T> | undefined,
+  ): Promise<void> {
+    try {
+      await operation();
+    } catch (error) {
+      logger.warn('Appointment side effect failed.', {
+        appointmentId,
+        sideEffect: label,
+        error,
+      });
+    }
   }
 }
