@@ -9,6 +9,7 @@ import { appointmentsRouter } from './appointments/routes.js';
 import { adminAvailabilityRouter, doctorAvailabilityRouter } from './availability/routes.js';
 import { calendarRouter } from './calendar/routes.js';
 import { environment } from './config/environment.js';
+import { docsRouter } from './docs/routes.js';
 import { doctorsRouter } from './doctors/routes.js';
 import { backgroundJobsRouter } from './jobs/routes.js';
 import { leaveRouter } from './leave/routes.js';
@@ -35,6 +36,7 @@ export function createApplication(): Express {
   application.use(express.json({ limit: '1mb' }));
   application.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
+  application.use('/docs', docsRouter);
   application.use('/auth', authRouter);
   application.use('/appointments', appointmentsRouter);
   application.use('/appointments', aiRouter);
