@@ -72,7 +72,7 @@ export function LeaveAdminPage(): React.JSX.Element {
         ...(isAdmin && form.doctorId !== '' ? { doctorId: form.doctorId } : {}),
         startDate: new Date(form.startDate).toISOString(),
         endDate: new Date(form.endDate).toISOString(),
-        reason: form.reason !== '' ? form.reason : undefined,
+        ...(form.reason !== '' ? { reason: form.reason } : {}),
       }),
     onSuccess: () => {
       notify('Leave created.', 'success');

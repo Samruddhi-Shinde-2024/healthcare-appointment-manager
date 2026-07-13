@@ -127,7 +127,7 @@ export function BookAppointmentPage(): React.JSX.Element {
 
   const { data: doctorsData, isLoading: doctorsLoading } = useQuery({
     queryKey: ['doctors', 'book', accessToken, search],
-    queryFn: () => api.doctorsList(accessToken!, { search: search || undefined, isActive: true, pageSize: 50 }),
+    queryFn: () => api.doctorsList(accessToken!, { ...(search !== '' ? { search } : {}), isActive: true, pageSize: 50 }),
     enabled: accessToken !== null,
   });
 

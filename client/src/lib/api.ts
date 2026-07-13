@@ -10,7 +10,6 @@ import type {
   Patient,
   ProcessJobsResult,
   SanitizedUser,
-  ApiMeta,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
@@ -30,16 +29,14 @@ type RequestOptions = Readonly<{
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
   token?: string | null;
-  params?: Record<string, string | number | boolean | undefined>;
+  params?: Record<string, string | number | boolean>;
 }>;
 
-function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
+function buildUrl(path: string, params?: Record<string, string | number | boolean>): string {
   if (params === undefined) return `${API_BASE_URL}${path}`;
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) {
-      query.set(key, String(value));
-    }
+    query.set(key, String(value));
   }
   const qs = query.toString();
   return qs.length > 0 ? `${API_BASE_URL}${path}?${qs}` : `${API_BASE_URL}${path}`;
@@ -73,8 +70,19 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
   return payload;
 }
 
-// Pagination defaults
-const DEFAULT_PAGE_SIZE = 10;
+// ─── Param builder helpers ────────────────────────────────────────────────────
+// Build a params object without undefined values (exactOptionalPropertyTypes safe)
+function buildParams(
+  raw: Record<string, string | number | boolean | undefined>,
+): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
+const PAGE_SIZE = 10;
 
 export type AppointmentListParams = Readonly<{
   status?: string;
@@ -98,18 +106,21 @@ export type PatientListParams = Readonly<{
   pageSize?: number;
 }>;
 
-export type PaginatedResult<T> = Readonly<{
-  data: T[];
-  meta: ApiMeta;
-}>;
-
 export const api = {
   // ── Auth ──────────────────────────────────────────────────────
   login: (body: Readonly<{ email: string; password: string }>) =>
     request<AuthResponse>('/auth/login', { method: 'POST', body }),
 
-  register: (body: Readonly<{ email: string; password: string; dateOfBirth?: string; gender?: string; emergencyContact?: string; medicalNotes?: string }>) =>
-    request<AuthResponse>('/auth/register', { method: 'POST', body }),
+  register: (
+    body: Readonly<{
+      email: string;
+      password: string;
+      dateOfBirth?: string;
+      gender?: string;
+      emergencyContact?: string;
+      medicalNotes?: string;
+    }>,
+  ) => request<AuthResponse>('/auth/register', { method: 'POST', body }),
 
   me: (token: string) => request<SanitizedUser>('/auth/me', { token }),
 
@@ -123,7 +134,7 @@ export const api = {
   appointments: (token: string, params?: AppointmentListParams) =>
     request<Appointment[]>('/appointments', {
       token,
-      params: { pageSize: DEFAULT_PAGE_SIZE, ...params },
+      params: buildParams({ pageSize: PAGE_SIZE, ...params }),
     }),
 
   appointmentById: (token: string, id: string) =>
@@ -159,18 +170,21 @@ export const api = {
   generatePostSummary: (token: string, appointmentId: string) =>
     request<unknown>(`/appointments/${appointmentId}/post-summary`, { method: 'POST', token }),
 
-  // ── Doctors (public list - all authenticated) ──────────────────
+  // ── Doctors ────────────────────────────────────────────────────
   doctorsList: (token: string, params?: DoctorListParams) =>
     request<Doctor[]>('/admin/doctors', {
       token,
-      params: { pageSize: DEFAULT_PAGE_SIZE, ...params },
+      params: buildParams({ pageSize: PAGE_SIZE, ...params }),
     }),
 
   doctorById: (token: string, id: string) =>
     request<Doctor>(`/admin/doctors/${id}`, { token }),
 
   doctorAvailability: (token: string, doctorId: string, params?: { isActive?: boolean }) =>
-    request<Availability[]>(`/doctors/${doctorId}/availability`, { token, params }),
+    request<Availability[]>(`/doctors/${doctorId}/availability`, {
+      token,
+      ...(params !== undefined ? { params: buildParams(params) } : {}),
+    }),
 
   createDoctor: (
     token: string,
@@ -232,7 +246,10 @@ export const api = {
 
   // ── Leave ──────────────────────────────────────────────────────
   leaves: (token: string, params?: { doctorId?: string; status?: string }) =>
-    request<Leave[]>('/doctors/leave', { token, params }),
+    request<Leave[]>('/doctors/leave', {
+      token,
+      ...(params !== undefined ? { params: buildParams(params) } : {}),
+    }),
 
   createLeave: (
     token: string,
@@ -242,7 +259,12 @@ export const api = {
   updateLeave: (
     token: string,
     id: string,
-    body: Readonly<{ startDate?: string; endDate?: string; reason?: string | null; status?: string }>,
+    body: Readonly<{
+      startDate?: string;
+      endDate?: string;
+      reason?: string | null;
+      status?: string;
+    }>,
   ) => request<Leave>(`/doctors/leave/${id}`, { method: 'PATCH', token, body }),
 
   cancelLeave: (token: string, id: string) =>
@@ -252,7 +274,7 @@ export const api = {
   patients: (token: string, params?: PatientListParams) =>
     request<Patient[]>('/admin/patients', {
       token,
-      params: { pageSize: DEFAULT_PAGE_SIZE, ...params },
+      params: buildParams({ pageSize: PAGE_SIZE, ...params }),
     }),
 
   patientById: (token: string, id: string) =>
@@ -278,7 +300,11 @@ export const api = {
   medicationReminders: (
     token: string,
     params?: { prescriptionId?: string; patientId?: string; status?: string },
-  ) => request<MedicationReminder[]>('/medication-reminders', { token, params }),
+  ) =>
+    request<MedicationReminder[]>('/medication-reminders', {
+      token,
+      ...(params !== undefined ? { params: buildParams(params) } : {}),
+    }),
 
   createMedicationReminders: (
     token: string,
@@ -289,14 +315,16 @@ export const api = {
     token: string,
     id: string,
     body: Readonly<{ status: 'PENDING' | 'SENT' | 'FAILED' | 'CANCELLED' }>,
-  ) => request<MedicationReminder>(`/medication-reminders/${id}/status`, { method: 'PATCH', token, body }),
+  ) =>
+    request<MedicationReminder>(`/medication-reminders/${id}/status`, {
+      method: 'PATCH',
+      token,
+      body,
+    }),
 
   // ── Calendar ───────────────────────────────────────────────────
   calendarConnect: (token: string) =>
     request<{ authUrl: string }>('/calendar/google/connect', { token }),
-
-  calendarCallback: (token: string, body: Readonly<{ code: string }>) =>
-    request<void>('/calendar/google/callback', { method: 'POST', token, body }),
 
   calendarDisconnect: (token: string) =>
     request<void>('/calendar/google', { method: 'DELETE', token }),

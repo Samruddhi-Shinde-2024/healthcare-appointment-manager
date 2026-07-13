@@ -81,7 +81,7 @@ export function DoctorsListPage(): React.JSX.Element {
     queryKey: ['doctors', 'list', accessToken, search],
     queryFn: () =>
       api.doctorsList(accessToken!, {
-        search: search !== '' ? search : undefined,
+        ...(search !== '' ? { search } : {}),
         isActive: true,
         pageSize: 50,
       }),

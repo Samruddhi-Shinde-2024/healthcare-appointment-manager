@@ -48,7 +48,7 @@ export function PatientsAdminPage(): React.JSX.Element {
     queryKey: ['patients', 'admin', accessToken, page, search],
     queryFn: () =>
       api.patients(accessToken!, {
-        search: search !== '' ? search : undefined,
+        ...(search !== '' ? { search } : {}),
         page,
         pageSize: 10,
       }),
@@ -191,7 +191,7 @@ export function PatientsAdminPage(): React.JSX.Element {
         }
         isOpen={editPatient !== null}
         title="Edit Patient Record"
-        description={editPatient?.email}
+        {...(editPatient !== null ? { description: editPatient.email } : {})}
         onClose={() => setEditPatient(null)}
       >
         <div className="space-y-4">

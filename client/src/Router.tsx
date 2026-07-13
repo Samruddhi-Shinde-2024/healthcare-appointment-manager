@@ -89,7 +89,7 @@ export function Router(): React.JSX.Element {
 function renderPage(
   route: string,
   role: UserRole,
-  navigate: (route: import('./hooks/useRoute').Route) => void,
+  _navigate: (route: import('./hooks/useRoute').Route) => void,
 ): React.JSX.Element {
   switch (route) {
     case '/app/dashboard':

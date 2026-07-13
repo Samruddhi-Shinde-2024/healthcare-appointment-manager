@@ -66,7 +66,7 @@ export function DoctorsAdminPage(): React.JSX.Element {
     queryKey,
     queryFn: () =>
       api.doctorsList(accessToken!, {
-        search: search !== '' ? search : undefined,
+        ...(search !== '' ? { search } : {}),
         page,
         pageSize: 10,
       }),
@@ -87,7 +87,7 @@ export function DoctorsAdminPage(): React.JSX.Element {
         experienceYears: Number(form.experienceYears),
         consultationFee: Number(form.consultationFee),
         slotDuration: Number(form.slotDuration),
-        bio: form.bio !== '' ? form.bio : undefined,
+        ...(form.bio !== '' ? { bio: form.bio } : {}),
       }),
     onSuccess: () => {
       notify('Doctor created successfully.', 'success');
