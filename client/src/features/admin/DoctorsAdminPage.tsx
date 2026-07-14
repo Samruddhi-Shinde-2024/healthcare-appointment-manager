@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, UserCheck, UserX } from 'lucide-react';
+import { Plus, Pencil, UserX } from 'lucide-react';
 import {
   PageHeader,
   Card,
@@ -8,8 +8,6 @@ import {
   EmptyState,
   Button,
   Modal,
-  Input,
-  Textarea,
   ConfirmDialog,
   Badge,
   SearchInput,

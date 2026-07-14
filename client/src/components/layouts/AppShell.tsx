@@ -13,7 +13,6 @@ import {
   ClipboardList,
   CalendarDays,
   Menu,
-  X,
   Shield,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';

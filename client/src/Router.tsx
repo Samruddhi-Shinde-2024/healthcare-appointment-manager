@@ -1,6 +1,6 @@
 import { Spinner } from './components/ui';
 import { useAuth } from './context/AuthContext';
-import { useRoute } from './hooks/useRoute';
+import { useRoute, type Route } from './hooks/useRoute';
 import { AppShell } from './components/layouts/AppShell';
 import { AuthLayout } from './components/layouts/AuthLayout';
 import { LoginPage } from './features/auth/LoginPage';
@@ -89,7 +89,7 @@ export function Router(): React.JSX.Element {
 function renderPage(
   route: string,
   role: UserRole,
-  _navigate: (route: import('./hooks/useRoute').Route) => void,
+  _navigate: (route: Route) => void,
 ): React.JSX.Element {
   switch (route) {
     case '/app/dashboard':

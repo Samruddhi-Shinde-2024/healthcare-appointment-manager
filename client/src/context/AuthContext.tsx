@@ -115,7 +115,6 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>): R
     return () => {
       isMounted = false;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = useCallback(

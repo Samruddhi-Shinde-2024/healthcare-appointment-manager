@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
-import { Button, Input } from '../../components/ui';
+import { Button } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { ApiError } from '../../lib/api';
 import { useRoute } from '../../hooks/useRoute';

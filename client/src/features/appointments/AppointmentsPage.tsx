@@ -11,7 +11,6 @@ import {
   Select,
   Modal,
   Textarea,
-  ConfirmDialog,
   Table,
   TableHeader,
   TableBody,
@@ -25,7 +24,7 @@ import { api } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { useToast } from '../../context/ToastContext';
 import { useRoute } from '../../hooks/useRoute';
-import type { Appointment, AppointmentStatus } from '../../types';
+import type { Appointment } from '../../types';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },

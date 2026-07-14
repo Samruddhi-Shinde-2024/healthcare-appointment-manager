@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Stethoscope, Clock, DollarSign, ChevronRight } from 'lucide-react';
+import { Stethoscope, Clock, DollarSign, ChevronRight } from 'lucide-react';
 import {
   PageHeader,
   Card,
   Skeleton,
   EmptyState,
   Button,
-  Modal,
   SearchInput,
   Badge,
 } from '../../components/ui';
@@ -123,7 +122,6 @@ export function BookAppointmentPage(): React.JSX.Element {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedSlot, setSelectedSlot] = useState<{ startTime: Date; endTime: Date } | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { data: doctorsData, isLoading: doctorsLoading } = useQuery({
     queryKey: ['doctors', 'book', accessToken, search],
