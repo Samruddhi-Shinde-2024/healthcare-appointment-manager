@@ -43,11 +43,8 @@ function generateSlots(
     if (!avail.isActive) continue;
     if (avail.dayOfWeek !== dayName) continue;
 
-    // Parse HH:MM from the stored time (ISO string, use UTC hours/minutes)
-    const startHour = new Date(avail.startTime).getUTCHours();
-    const startMin = new Date(avail.startTime).getUTCMinutes();
-    const endHour = new Date(avail.endTime).getUTCHours();
-    const endMin = new Date(avail.endTime).getUTCMinutes();
+    const [startHour = 0, startMin = 0] = avail.startTime.split(':').map(Number);
+    const [endHour = 0, endMin = 0] = avail.endTime.split(':').map(Number);
 
     let current = new Date(date);
     current.setHours(startHour, startMin, 0, 0);
@@ -125,7 +122,7 @@ export function BookAppointmentPage(): React.JSX.Element {
 
   const { data: doctorsData, isLoading: doctorsLoading } = useQuery({
     queryKey: ['doctors', 'book', accessToken, search],
-    queryFn: () => api.doctorsList(accessToken!, { ...(search !== '' ? { search } : {}), isActive: true, pageSize: 50 }),
+    queryFn: () => api.doctorsDirectory(accessToken!, { ...(search !== '' ? { search } : {}), isActive: true, pageSize: 50 }),
     enabled: accessToken !== null,
   });
 

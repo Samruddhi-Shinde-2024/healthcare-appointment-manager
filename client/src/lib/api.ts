@@ -13,6 +13,10 @@ import type {
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
+const ACCESS_TOKEN_KEY = 'ham.accessToken';
+const REFRESH_TOKEN_KEY = 'ham.refreshToken';
+const SESSION_REFRESHED_EVENT = 'ham:session-refreshed';
+const SESSION_CLEARED_EVENT = 'ham:session-cleared';
 
 export class ApiError extends Error {
   public constructor(
@@ -42,7 +46,47 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
   return qs.length > 0 ? `${API_BASE_URL}${path}?${qs}` : `${API_BASE_URL}${path}`;
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<ApiSuccess<T>> {
+function persistRefreshedSession(result: AuthResponse): void {
+  window.localStorage.setItem(ACCESS_TOKEN_KEY, result.tokens.accessToken);
+  window.localStorage.setItem(REFRESH_TOKEN_KEY, result.tokens.refreshToken);
+  window.dispatchEvent(new CustomEvent<AuthResponse>(SESSION_REFRESHED_EVENT, { detail: result }));
+}
+
+function clearExpiredSession(): void {
+  window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+  window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+  window.dispatchEvent(new Event(SESSION_CLEARED_EVENT));
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = window.localStorage.getItem(REFRESH_TOKEN_KEY);
+
+  if (refreshToken === null) {
+    return null;
+  }
+
+  try {
+    const response = await request<AuthResponse>(
+      '/auth/refresh',
+      {
+        method: 'POST',
+        body: { refreshToken },
+      },
+      false,
+    );
+    persistRefreshedSession(response.data);
+    return response.data.tokens.accessToken;
+  } catch {
+    clearExpiredSession();
+    return null;
+  }
+}
+
+async function request<T>(
+  path: string,
+  options: RequestOptions = {},
+  retryOnUnauthorized = true,
+): Promise<ApiSuccess<T>> {
   const url = buildUrl(path, options.params);
   const response = await fetch(url, {
     method: options.method ?? 'GET',
@@ -59,6 +103,14 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
   const payload = (await response.json()) as ApiSuccess<T> | ApiFailure;
 
   if (!response.ok || !payload.success) {
+    if (response.status === 401 && retryOnUnauthorized && options.token !== undefined && options.token !== null) {
+      const nextAccessToken = await refreshAccessToken();
+
+      if (nextAccessToken !== null) {
+        return request<T>(path, { ...options, token: nextAccessToken }, false);
+      }
+    }
+
     const failure = payload as ApiFailure;
     throw new ApiError(
       failure.error?.message ?? 'The API request failed.',
@@ -171,6 +223,12 @@ export const api = {
     request<unknown>(`/appointments/${appointmentId}/post-summary`, { method: 'POST', token }),
 
   // ── Doctors ────────────────────────────────────────────────────
+  doctorsDirectory: (token: string, params?: DoctorListParams) =>
+    request<Doctor[]>('/doctors', {
+      token,
+      params: buildParams({ pageSize: PAGE_SIZE, ...params }),
+    }),
+
   doctorsList: (token: string, params?: DoctorListParams) =>
     request<Doctor[]>('/admin/doctors', {
       token,
@@ -324,7 +382,7 @@ export const api = {
 
   // ── Calendar ───────────────────────────────────────────────────
   calendarConnect: (token: string) =>
-    request<{ authUrl: string }>('/calendar/google/connect', { token }),
+    request<{ authorizationUrl: string }>('/calendar/google/connect', { token }),
 
   calendarDisconnect: (token: string) =>
     request<void>('/calendar/google', { method: 'DELETE', token }),

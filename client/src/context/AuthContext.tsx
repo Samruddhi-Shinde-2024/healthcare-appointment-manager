@@ -6,6 +6,8 @@ import { useToast } from './ToastContext';
 
 const ACCESS_TOKEN_KEY = 'ham.accessToken';
 const REFRESH_TOKEN_KEY = 'ham.refreshToken';
+const SESSION_REFRESHED_EVENT = 'ham:session-refreshed';
+const SESSION_CLEARED_EVENT = 'ham:session-cleared';
 
 type AuthContextValue = Readonly<{
   user: SanitizedUser | null;
@@ -116,6 +118,26 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>): R
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const handleSessionRefreshed = (event: Event): void => {
+      const refreshedEvent = event as CustomEvent<AuthResponse>;
+      applyAuthResult(refreshedEvent.detail);
+    };
+
+    const handleSessionCleared = (): void => {
+      setUser(null);
+      setAccessToken(null);
+    };
+
+    window.addEventListener(SESSION_REFRESHED_EVENT, handleSessionRefreshed);
+    window.addEventListener(SESSION_CLEARED_EVENT, handleSessionCleared);
+
+    return () => {
+      window.removeEventListener(SESSION_REFRESHED_EVENT, handleSessionRefreshed);
+      window.removeEventListener(SESSION_CLEARED_EVENT, handleSessionCleared);
+    };
+  }, [applyAuthResult]);
 
   const login = useCallback(
     async (email: string, password: string): Promise<void> => {

@@ -80,7 +80,7 @@ export function DoctorsListPage(): React.JSX.Element {
   const { data, isLoading } = useQuery({
     queryKey: ['doctors', 'list', accessToken, search],
     queryFn: () =>
-      api.doctorsList(accessToken!, {
+      api.doctorsDirectory(accessToken!, {
         ...(search !== '' ? { search } : {}),
         isActive: true,
         pageSize: 50,

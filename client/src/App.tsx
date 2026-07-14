@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter } from 'react-router-dom';
 import { ToastProvider } from './context/ToastContext';
 import { AuthProvider } from './context/AuthContext';
 import { Router } from './Router';
@@ -28,7 +29,9 @@ export function App(): React.JSX.Element {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <AuthProvider>
-          <Router />
+          <BrowserRouter>
+            <Router />
+          </BrowserRouter>
         </AuthProvider>
       </ToastProvider>
     </QueryClientProvider>

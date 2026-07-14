@@ -28,8 +28,7 @@ export function SettingsPage(): React.JSX.Element {
     setCalendarConnecting(true);
     try {
       const res = await api.calendarConnect(accessToken);
-      // Redirect to Google OAuth
-      window.location.href = res.data.authUrl;
+      window.location.href = res.data.authorizationUrl;
     } catch (err) {
       if (err instanceof ApiError) {
         notify(err.message, 'error');

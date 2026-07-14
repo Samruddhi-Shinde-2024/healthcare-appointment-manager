@@ -10,7 +10,7 @@ import { adminAvailabilityRouter, doctorAvailabilityRouter } from './availabilit
 import { calendarRouter } from './calendar/routes.js';
 import { environment } from './config/environment.js';
 import { docsRouter } from './docs/routes.js';
-import { doctorsRouter } from './doctors/routes.js';
+import { doctorDirectoryRouter, doctorsRouter } from './doctors/routes.js';
 import { backgroundJobsRouter } from './jobs/routes.js';
 import { leaveRouter } from './leave/routes.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -41,6 +41,7 @@ export function createApplication(): Express {
   application.use('/appointments', appointmentsRouter);
   application.use('/appointments', aiRouter);
   application.use('/calendar', calendarRouter);
+  application.use('/doctors', doctorDirectoryRouter);
   application.use('/doctors', doctorAvailabilityRouter);
   application.use('/doctors/leave', leaveRouter);
   application.use('/admin/availability', adminAvailabilityRouter);

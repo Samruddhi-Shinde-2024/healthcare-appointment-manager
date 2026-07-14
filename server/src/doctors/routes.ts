@@ -1,4 +1,4 @@
-import { UserRole } from '@prisma/client';
+import { UserRole, type UserRole as PrismaUserRole } from '@prisma/client';
 import { Router, type Router as ExpressRouter } from 'express';
 
 import { validateRequest, idParamsSchema } from '../common/validation.js';
@@ -16,6 +16,12 @@ const doctorsService = new DoctorsService(doctorsRepository, usersRepository);
 const doctorsController = new DoctorsController(doctorsService);
 
 export const doctorsRouter: ExpressRouter = Router();
+export const doctorDirectoryRouter: ExpressRouter = Router();
+
+const directoryRoles: PrismaUserRole[] = [UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT];
+
+doctorDirectoryRouter.use(authenticate(), authorize(...directoryRoles));
+doctorDirectoryRouter.get('/', validateRequest({ query: doctorListQuerySchema }), doctorsController.list);
 
 doctorsRouter.use(authenticate(), authorize(UserRole.ADMIN));
 doctorsRouter.post('/', validateRequest({ body: createDoctorSchema }), doctorsController.create);
