@@ -4,6 +4,26 @@ Healthcare Appointment Manager is a production-oriented full-stack assignment fo
 
 The project is intentionally structured like a handoff-ready engineering codebase rather than a demo. It uses strict TypeScript, layered backend modules, Prisma-backed relational data modeling, centralized validation/error handling, and role-based access control.
 
+> **Live Demo**
+
+Frontend: https://healthcare-appointment-manager-clie.vercel.app
+
+Backend API: https://healthcare-appointment-manager-zfsp.onrender.com
+
+## Demo Credentials
+
+Admin
+Email: admin@healthcare.local
+Password: Admin@123
+
+Doctor
+Email: arjun.mehta@healthcare.local
+Password: Admin@123
+
+Patient
+Create a new account using the registration page.
+> These are development/demo credentials seeded automatically for evaluation purposes.
+
 ## Features
 
 - Patient registration and JWT login with refresh-token rotation.
@@ -11,10 +31,10 @@ The project is intentionally structured like a handoff-ready engineering codebas
 - Admin doctor and patient management.
 - Transaction-safe appointment booking, rescheduling, cancellation, and status updates.
 - Doctor availability and leave management.
-- AI pre-visit and post-visit summaries stored in `LLMSummary`.
-- Email delivery attempts persisted in `EmailLog`.
+- AI-powered pre-visit and post-visit summaries with graceful fallback when AI credentials are not configured.
+- Email notification service with SMTP integration (requires SMTP configuration).
+- Google Calendar synchronization via OAuth (requires Google OAuth credentials).
 - In-app notifications persisted in `Notification`.
-- Google Calendar account connection and appointment event synchronization.
 - Durable background job records for AI summaries, email delivery, reminders, and calendar sync.
 - Medication reminder creation, scheduling, and status updates.
 - Swagger/OpenAPI documentation served by the API.
@@ -159,6 +179,7 @@ Important variables:
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`: Google OAuth configuration.
 - `CLIENT_ORIGIN`: allowed CORS origin for the frontend.
 - `VITE_API_URL`: frontend API base URL.
+> **Note:** AI summaries, SMTP email notifications, and Google Calendar synchronization require external credentials. The application is designed to fail gracefully when these credentials are not configured, allowing the remaining functionality to continue operating normally.
 
 ## Google Calendar Setup
 
@@ -213,6 +234,18 @@ Start the full workspace in development mode:
 ```bash
 pnpm run dev
 ```
+The development seed script creates:
+
+- 1 Admin account
+- 5 Doctor accounts
+- 8 Patient accounts
+- Doctor availability
+- Doctor leave records
+
+Run:
+
+```bash
+pnpm --filter @healthcare/server run prisma:seed
 
 Build all packages:
 
@@ -251,6 +284,13 @@ After starting the server, open:
 
 - Swagger UI: `http://localhost:4000/docs`
 - OpenAPI JSON: `http://localhost:4000/docs/openapi.json`
+
+### Production Backend
+
+Backend API:
+https://healthcare-appointment-manager-zfsp.onrender.com
+
+The deployed backend exposes the same REST API and Swagger documentation after deployment.
 
 The API uses a consistent response shape:
 
@@ -335,10 +375,12 @@ This makes double-booking prevention a database-backed invariant rather than onl
 ### AI Integration Strategy
 
 AI prompts live outside controllers. Services read symptom submissions or visit/prescription context, call the configured model, and persist outputs in `LLMSummary`. Failures are gracefully recorded as failed summaries so appointment workflows do not collapse when the AI provider is unavailable.
+If no AI provider credentials are configured, the application stores a fallback summary instead of failing the appointment workflow.
 
 ### Email and Notifications
 
 Email delivery attempts are persisted to `EmailLog`; in-app notifications are persisted to `Notification`. Appointment workflows trigger these services as side effects and log failures without rolling back successful appointment transactions.
+SMTP credentials are intentionally excluded from the repository. Configure SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and EMAIL_FROM to enable email delivery.
 
 ### Background Job Processing
 
@@ -347,6 +389,13 @@ The `BackgroundJob` model is used as a durable job ledger for AI summaries, emai
 ### Google Calendar
 
 Calendar integration uses a provider abstraction. The current implementation is Google-specific, but appointment services depend on a calendar service rather than Google API details. OAuth tokens are encrypted before persistence and are never returned in API responses.
+Google Calendar synchronization requires:
+
+- GOOGLE_CLIENT_ID
+- GOOGLE_CLIENT_SECRET
+- GOOGLE_REDIRECT_URI
+
+Without these credentials the application continues functioning while disabling calendar synchronization.
 
 ### Security
 
@@ -372,6 +421,16 @@ Recommended deployment stack:
 
 The application is designed so that environment variables can be updated without requiring source code changes.
 
+# Hosted Application
+
+Frontend (Vercel)
+
+https://healthcare-appointment-manager-clie.vercel.app
+
+Backend (Render)
+
+https://healthcare-appointment-manager-zfsp.onrender.com
+
 ## Future Improvements
 
 - Dedicated BullMQ worker processes for background jobs.
@@ -383,3 +442,45 @@ The application is designed so that environment variables can be updated without
 - Real-time appointment updates using WebSockets.
 - Monitoring dashboards using Grafana/Prometheus.
 - Docker Compose production deployment.
+
+---
+
+# Screenshots
+
+## Login
+
+![Login](docs/screenshots/login.png)
+
+## Register
+
+![Register](docs/screenshots/register.png)
+
+## Patient Dashboard
+
+![Patient Dashboard](docs/screenshots/patient-dashboard.png)
+
+## Appointment Booking
+
+![Booking](docs/screenshots/book-appointment.png)
+
+## Doctor Dashboard
+
+![Doctor Dashboard](docs/screenshots/doctor-dashboard.png)
+
+## Admin Dashboard
+
+![Admin Dashboard](docs/screenshots/admin-dashboard.png)
+
+## Notes
+
+Some integrations depend on external providers.
+
+The application continues operating when these providers are not configured.
+
+Required providers include:
+
+- OpenAI
+- SMTP
+- Google Calendar OAuth
+
+Credentials are intentionally excluded from the repository for security reasons.
