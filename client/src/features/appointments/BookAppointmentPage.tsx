@@ -9,6 +9,9 @@ import {
   Button,
   SearchInput,
   Badge,
+  Textarea,
+  Input,
+  Select,
 } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
@@ -28,6 +31,13 @@ const DAY_LABELS: Record<string, string> = {
   SATURDAY: 'Sat',
   SUNDAY: 'Sun',
 };
+
+const SEVERITY_OPTIONS = [
+  { value: '', label: 'Select severity…' },
+  { value: 'Mild', label: 'Mild' },
+  { value: 'Moderate', label: 'Moderate' },
+  { value: 'Severe', label: 'Severe' },
+];
 
 function generateSlots(
   availability: Availability[],
@@ -119,6 +129,10 @@ export function BookAppointmentPage(): React.JSX.Element {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedSlot, setSelectedSlot] = useState<{ startTime: Date; endTime: Date } | null>(null);
+  const [symptoms, setSymptoms] = useState('');
+  const [symptomDuration, setSymptomDuration] = useState('');
+  const [symptomSeverity, setSymptomSeverity] = useState('');
+  const [additionalNotes, setAdditionalNotes] = useState('');
 
   const { data: doctorsData, isLoading: doctorsLoading } = useQuery({
     queryKey: ['doctors', 'book', accessToken, search],
@@ -138,9 +152,19 @@ export function BookAppointmentPage(): React.JSX.Element {
         doctorId: selectedDoctor!.id,
         startTime: selectedSlot!.startTime.toISOString(),
         endTime: selectedSlot!.endTime.toISOString(),
+        symptomSubmission: {
+          symptoms: symptoms.trim(),
+          ...(symptomDuration.trim() !== '' ? { duration: symptomDuration.trim() } : {}),
+          ...(symptomSeverity !== '' ? { severity: symptomSeverity } : {}),
+          ...(additionalNotes.trim() !== '' ? { additionalNotes: additionalNotes.trim() } : {}),
+        },
       }),
     onSuccess: () => {
       notify('Appointment booked successfully!', 'success');
+      setSymptoms('');
+      setSymptomDuration('');
+      setSymptomSeverity('');
+      setAdditionalNotes('');
       void queryClient.invalidateQueries({ queryKey: ['appointments'] });
       navigate('/app/appointments');
     },
@@ -352,11 +376,49 @@ export function BookAppointmentPage(): React.JSX.Element {
             </div>
           </div>
 
+          <div className="mt-6 space-y-4 rounded-xl border border-brand-100 bg-brand-50/40 p-5">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Symptoms for the doctor</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                This is saved with the appointment and used to prepare a pre-visit AI summary.
+              </p>
+            </div>
+            <Textarea
+              required
+              label="What symptoms are you experiencing?"
+              placeholder="Example: Fever, sore throat, body aches, and fatigue since yesterday."
+              value={symptoms}
+              onChange={(event) => setSymptoms(event.target.value)}
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input
+                label="Duration"
+                placeholder="Example: 2 days"
+                value={symptomDuration}
+                onChange={(event) => setSymptomDuration(event.target.value)}
+              />
+              <Select
+                label="Severity"
+                options={SEVERITY_OPTIONS}
+                value={symptomSeverity}
+                onChange={(event) => setSymptomSeverity(event.target.value)}
+              />
+            </div>
+            <Textarea
+              label="Additional notes"
+              placeholder="Medication taken, allergies, relevant history, or anything else the doctor should know."
+              rows={3}
+              value={additionalNotes}
+              onChange={(event) => setAdditionalNotes(event.target.value)}
+            />
+          </div>
+
           <div className="mt-6 flex justify-end gap-3">
             <Button variant="secondary" onClick={() => navigate('/app/appointments')}>
               Cancel
             </Button>
             <Button
+              disabled={symptoms.trim().length < 3}
               loading={bookMutation.isPending}
               onClick={() => void bookMutation.mutate()}
             >

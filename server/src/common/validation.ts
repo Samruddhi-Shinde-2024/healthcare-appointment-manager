@@ -45,7 +45,11 @@ export function validateRequest(schemas: RequestSchemas): RequestHandler {
       }
 
       if (schemas.query !== undefined) {
-        request.query = parseRequestPart(schemas.query, request.query) as Request['query'];
+        Object.defineProperty(request, 'query', {
+          configurable: true,
+          enumerable: true,
+          value: parseRequestPart(schemas.query, request.query),
+        });
       }
 
       next();

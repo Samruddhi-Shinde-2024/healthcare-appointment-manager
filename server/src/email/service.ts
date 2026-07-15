@@ -1,10 +1,34 @@
-import { EmailDeliveryStatus, type PrismaClient } from '@prisma/client';
+import { EmailDeliveryStatus, ReminderStatus, type PrismaClient } from '@prisma/client';
+import { createTransport } from 'nodemailer';
 
 import type { AppointmentRecord } from '../appointments/repository.js';
 import { environment } from '../config/environment.js';
 import { logger } from '../config/logger.js';
 
-type EmailTemplateType = 'APPOINTMENT_BOOKED' | 'APPOINTMENT_RESCHEDULED' | 'APPOINTMENT_CANCELLED';
+export type EmailTemplateType =
+  | 'APPOINTMENT_BOOKED'
+  | 'APPOINTMENT_RESCHEDULED'
+  | 'APPOINTMENT_CANCELLED'
+  | 'APPOINTMENT_REMINDER'
+  | 'MEDICATION_REMINDER';
+
+type EmailDeliveryResult = Readonly<{ ok: true } | { ok: false; failureReason: string }>;
+
+type AppointmentEmailContext = Readonly<{
+  id: string;
+  startTime: Date;
+  endTime: Date;
+  doctor: {
+    user: {
+      email: string;
+    };
+  };
+  patient: {
+    user: {
+      email: string;
+    };
+  };
+}>;
 
 type AppointmentEmail = Readonly<{
   recipient: string;
@@ -28,8 +52,105 @@ export class EmailService {
     await this.sendAppointmentEmails(appointment, actorId, 'APPOINTMENT_CANCELLED');
   }
 
+  public async sendAppointmentReminder(appointment: AppointmentRecord, actorId: string): Promise<void> {
+    await this.sendAppointmentEmails(appointment, actorId, 'APPOINTMENT_REMINDER');
+  }
+
+  public async sendAppointmentEmailById(
+    appointmentId: string,
+    actorId: string,
+    templateType: EmailTemplateType,
+  ): Promise<void> {
+    const appointment = await this.database.appointment.findUnique({
+      where: {
+        id: appointmentId,
+      },
+      include: {
+        doctor: {
+          include: {
+            user: true,
+          },
+        },
+        patient: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (appointment === null) {
+      logger.warn('Email job skipped because appointment was not found.', {
+        appointmentId,
+        templateType,
+      });
+      return;
+    }
+
+    await this.sendAppointmentEmails(appointment, actorId, templateType);
+  }
+
+  public async sendMedicationReminderById(reminderId: string, actorId: string): Promise<void> {
+    const reminder = await this.database.medicationReminder.findUnique({
+      where: {
+        id: reminderId,
+      },
+      include: {
+        patient: {
+          include: {
+            user: true,
+          },
+        },
+        prescription: {
+          include: {
+            appointment: {
+              include: {
+                doctor: {
+                  include: {
+                    user: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (reminder === null || reminder.status === ReminderStatus.CANCELLED) {
+      return;
+    }
+
+    const deliveryResult = await this.persistDeliveryAttempt(
+      reminder.prescription.appointmentId,
+      {
+        recipient: reminder.patient.user.email,
+        templateType: 'MEDICATION_REMINDER',
+        subject: 'Medication reminder',
+        body: [
+          'This is a reminder to follow your medication schedule.',
+          `Scheduled reminder time: ${reminder.scheduledAt.toISOString()}.`,
+          `Doctor: ${reminder.prescription.appointment.doctor.user.email}.`,
+        ].join('\n'),
+      },
+      actorId,
+    );
+
+    await this.database.medicationReminder.update({
+      where: {
+        id: reminder.id,
+      },
+      data: {
+        status: deliveryResult.ok ? ReminderStatus.SENT : ReminderStatus.FAILED,
+        sentAt: deliveryResult.ok ? new Date() : null,
+        retryCount: deliveryResult.ok ? reminder.retryCount : { increment: 1 },
+        updatedBy: actorId,
+      },
+    });
+  }
+
   private async sendAppointmentEmails(
-    appointment: AppointmentRecord,
+    appointment: AppointmentEmailContext,
     actorId: string,
     templateType: EmailTemplateType,
   ): Promise<void> {
@@ -45,10 +166,10 @@ export class EmailService {
     appointmentId: string,
     email: AppointmentEmail,
     actorId: string,
-  ): Promise<void> {
-    try {
-      const deliveryResult = await this.deliver(email);
+  ): Promise<EmailDeliveryResult> {
+    const deliveryResult = await this.deliver(email);
 
+    try {
       await this.database.emailLog.create({
         data: {
           appointmentId,
@@ -70,39 +191,62 @@ export class EmailService {
         error,
       });
     }
+
+    return deliveryResult;
   }
 
-  private deliver(email: AppointmentEmail): Promise<Readonly<{ ok: true } | { ok: false; failureReason: string }>> {
+  private async deliver(email: AppointmentEmail): Promise<EmailDeliveryResult> {
     if (
       environment.SMTP_HOST === undefined ||
       environment.SMTP_USER === undefined ||
       environment.SMTP_PASSWORD === undefined ||
       environment.EMAIL_FROM === undefined
     ) {
-      return Promise.resolve({
+      return {
         ok: false,
         failureReason: 'SMTP delivery is not configured.',
-      });
+      };
     }
 
-    logger.info('Email delivery provider is configured; delivery is recorded for retry-capable processing.', {
-      recipient: email.recipient,
-      templateType: email.templateType,
-      smtpHost: environment.SMTP_HOST,
-      smtpPort: environment.SMTP_PORT,
-      from: environment.EMAIL_FROM,
-      subject: email.subject,
-    });
+    try {
+      const transporter = createTransport({
+        host: environment.SMTP_HOST,
+        port: environment.SMTP_PORT,
+        secure: environment.SMTP_PORT === 465,
+        auth: {
+          user: environment.SMTP_USER,
+          pass: environment.SMTP_PASSWORD,
+        },
+      });
 
-    return Promise.resolve({
-      ok: false,
-      failureReason: 'SMTP transport package is not installed in this phase.',
-    });
+      await transporter.sendMail({
+        from: environment.EMAIL_FROM,
+        to: email.recipient,
+        subject: email.subject,
+        text: email.body,
+      });
+
+      return {
+        ok: true,
+      };
+    } catch (error) {
+      const failureReason = error instanceof Error ? error.message : 'SMTP delivery failed.';
+      logger.warn('SMTP email delivery failed.', {
+        recipient: email.recipient,
+        templateType: email.templateType,
+        error,
+      });
+
+      return {
+        ok: false,
+        failureReason,
+      };
+    }
   }
 
   private buildAppointmentEmail(
     recipient: string,
-    appointment: AppointmentRecord,
+    appointment: AppointmentEmailContext,
     templateType: EmailTemplateType,
   ): AppointmentEmail {
     const appointmentTime = appointment.startTime.toISOString();
@@ -128,6 +272,20 @@ export class EmailService {
           templateType,
           subject: 'Appointment cancelled',
           body: `Your appointment scheduled for ${appointmentTime} was cancelled.`,
+        };
+      case 'APPOINTMENT_REMINDER':
+        return {
+          recipient,
+          templateType,
+          subject: 'Appointment reminder',
+          body: `Reminder: your appointment starts at ${appointmentTime}.`,
+        };
+      case 'MEDICATION_REMINDER':
+        return {
+          recipient,
+          templateType,
+          subject: 'Medication reminder',
+          body: 'This is a reminder to follow your medication schedule.',
         };
     }
   }

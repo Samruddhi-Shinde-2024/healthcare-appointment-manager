@@ -10,14 +10,16 @@ export function errorHandler(
   response: Response,
   _next: NextFunction,
 ): void {
-  const applicationError =
-    error instanceof ApplicationError
-      ? error
-      : new ApplicationError('An unexpected error occurred.', 500, 'INTERNAL_SERVER_ERROR');
+  const isKnownError = error instanceof ApplicationError;
+  const applicationError = isKnownError
+    ? error
+    : new ApplicationError('An unexpected error occurred.', 500, 'INTERNAL_SERVER_ERROR');
 
   logger.error(applicationError.message, {
     code: applicationError.code,
-    error,
+    ...(isKnownError ? {} : { originalError: error }),
+    ...(isKnownError ? {} : { originalMessage: getErrorMessage(error) }),
+    ...(isKnownError ? {} : { originalStack: getErrorStack(error) }),
     method: request.method,
     path: request.path,
     requestId: request.requestId,
@@ -30,9 +32,28 @@ export function errorHandler(
       message: applicationError.message,
       requestId: request.requestId,
       ...(applicationError.details === undefined ? {} : { details: applicationError.details }),
-      ...(environment.NODE_ENV === 'development' && applicationError.stack !== undefined
-        ? { stack: applicationError.stack }
+      ...(environment.NODE_ENV === 'development'
+        ? {
+            stack: getErrorStack(error) ?? applicationError.stack,
+            ...(isKnownError ? {} : { cause: getErrorMessage(error) }),
+          }
         : {}),
     },
   });
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  return 'Unknown error';
+}
+
+function getErrorStack(error: unknown): string | undefined {
+  return error instanceof Error ? error.stack : undefined;
 }

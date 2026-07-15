@@ -76,9 +76,12 @@ export class LeaveService {
   }
 
   public async list(query: LeaveListQuery, actor: AuthenticatedUser): Promise<LeaveResponse[]> {
-    const doctorId = await this.resolveDoctorId(query.doctorId, actor);
+    const doctorId =
+      actor.role === UserRole.ADMIN && query.doctorId === undefined
+        ? undefined
+        : await this.resolveDoctorId(query.doctorId, actor);
     const leaves = await this.leaveRepository.list({
-      doctorId,
+      ...(doctorId === undefined ? {} : { doctorId }),
       ...(query.status === undefined ? {} : { status: query.status }),
     });
 

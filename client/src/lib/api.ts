@@ -194,7 +194,18 @@ export const api = {
 
   bookAppointment: (
     token: string,
-    body: Readonly<{ doctorId: string; patientId?: string; startTime: string; endTime: string }>,
+    body: Readonly<{
+      doctorId: string;
+      patientId?: string;
+      startTime: string;
+      endTime: string;
+      symptomSubmission?: {
+        symptoms: string;
+        duration?: string;
+        severity?: string;
+        additionalNotes?: string;
+      };
+    }>,
   ) => request<Appointment>('/appointments', { method: 'POST', token, body }),
 
   rescheduleAppointment: (

@@ -1,4 +1,4 @@
-import { AppointmentStatus, UserRole } from '@prisma/client';
+import { AppointmentStatus, LLMSummaryType, UserRole } from '@prisma/client';
 
 import type { AuthenticatedUser } from '../auth/types.js';
 import type { PaginationMeta } from '../common/pagination.js';
@@ -11,6 +11,7 @@ import { ApplicationError } from '../errors/application-error.js';
 import type { BackgroundJobsService } from '../jobs/service.js';
 import type { NotificationsService } from '../notifications/service.js';
 import type { AppointmentRecord, AppointmentsRepository } from './repository.js';
+import { findSummaryByType } from './repository.js';
 import type {
   AppointmentListQuery,
   BookAppointmentInput,
@@ -30,6 +31,25 @@ export type AppointmentResponse = Readonly<{
   endTime: string;
   status: AppointmentStatus;
   cancellationReason: string | null;
+  symptoms: {
+    symptoms: string;
+    duration: string | null;
+    severity: string | null;
+    additionalNotes: string | null;
+  } | null;
+  preVisitSummary: {
+    status: string;
+    content: string;
+    urgencyLevel: string | null;
+    chiefComplaint: string | null;
+    failureReason: string | null;
+  } | null;
+  postVisitSummary: {
+    status: string;
+    content: string;
+    followUpGuidance: string | null;
+    failureReason: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }>;
@@ -40,6 +60,9 @@ export type AppointmentListResponse = Readonly<{
 }>;
 
 function serializeAppointment(appointment: AppointmentRecord): AppointmentResponse {
+  const preVisitSummary = findSummaryByType(appointment, LLMSummaryType.PRE_VISIT);
+  const postVisitSummary = findSummaryByType(appointment, LLMSummaryType.POST_VISIT);
+
   return {
     id: appointment.id,
     doctorId: appointment.doctorId,
@@ -51,6 +74,34 @@ function serializeAppointment(appointment: AppointmentRecord): AppointmentRespon
     endTime: appointment.endTime.toISOString(),
     status: appointment.status,
     cancellationReason: appointment.cancellationReason,
+    symptoms:
+      appointment.symptoms === null
+        ? null
+        : {
+            symptoms: appointment.symptoms.symptoms,
+            duration: appointment.symptoms.duration,
+            severity: appointment.symptoms.severity,
+            additionalNotes: appointment.symptoms.additionalNotes,
+          },
+    preVisitSummary:
+      preVisitSummary === null
+        ? null
+        : {
+            status: preVisitSummary.status,
+            content: preVisitSummary.content,
+            urgencyLevel: preVisitSummary.urgencyLevel,
+            chiefComplaint: preVisitSummary.chiefComplaint,
+            failureReason: preVisitSummary.failureReason,
+          },
+    postVisitSummary:
+      postVisitSummary === null
+        ? null
+        : {
+            status: postVisitSummary.status,
+            content: postVisitSummary.content,
+            followUpGuidance: postVisitSummary.followUpGuidance,
+            failureReason: postVisitSummary.failureReason,
+          },
     createdAt: appointment.createdAt.toISOString(),
     updatedAt: appointment.updatedAt.toISOString(),
   };
@@ -100,6 +151,9 @@ export class AppointmentsService {
         patientId,
         startTime: input.startTime,
         endTime: input.endTime,
+        ...(input.symptomSubmission === undefined
+          ? {}
+          : { symptomSubmission: input.symptomSubmission }),
         actorId: actor.id,
       });
 

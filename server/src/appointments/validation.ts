@@ -4,6 +4,12 @@ import { z } from 'zod';
 import { paginationQuerySchema } from '../common/pagination.js';
 
 const appointmentDateSchema = z.coerce.date();
+const symptomSubmissionSchema = z.object({
+  symptoms: z.string().trim().min(3).max(2_000),
+  duration: z.string().trim().min(1).max(120).optional(),
+  severity: z.string().trim().min(1).max(120).optional(),
+  additionalNotes: z.string().trim().min(1).max(2_000).optional(),
+});
 
 function validateChronology<T extends { startTime: Date; endTime: Date }>(value: T): boolean {
   return value.startTime.getTime() < value.endTime.getTime();
@@ -19,6 +25,7 @@ export const bookAppointmentSchema = z
     patientId: z.string().uuid().optional(),
     startTime: appointmentDateSchema,
     endTime: appointmentDateSchema,
+    symptomSubmission: symptomSubmissionSchema.optional(),
   })
   .refine(validateChronology, {
     message: 'Appointment start time must be before end time.',

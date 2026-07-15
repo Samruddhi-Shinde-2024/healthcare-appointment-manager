@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Filter, Calendar, XCircle, RotateCcw } from 'lucide-react';
+import { Filter, Calendar, XCircle, RotateCcw, Brain } from 'lucide-react';
 import {
   PageHeader,
   Card,
@@ -21,10 +21,10 @@ import {
 } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
-import { formatDateTime } from '../../lib/format';
+import { addMinutes, formatDateTime } from '../../lib/format';
 import { useToast } from '../../context/ToastContext';
 import { useRoute } from '../../hooks/useRoute';
-import type { Appointment } from '../../types';
+import type { Appointment, Availability } from '../../types';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -38,6 +38,42 @@ const STATUS_OPTIONS = [
 
 type CancelModalState = Readonly<{ isOpen: boolean; appointmentId: string }>;
 type RescheduleModalState = Readonly<{ isOpen: boolean; appointment: Appointment | null }>;
+type SummaryModalState = Readonly<{ isOpen: boolean; appointment: Appointment | null }>;
+type AppointmentSlot = Readonly<{ startTime: Date; endTime: Date }>;
+
+function generateSlots(availability: Availability[], selectedDate: string): AppointmentSlot[] {
+  if (selectedDate === '') return [];
+
+  const date = new Date(selectedDate);
+  const dayName = date.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+  const slots: AppointmentSlot[] = [];
+
+  for (const avail of availability) {
+    if (!avail.isActive || avail.dayOfWeek !== dayName) continue;
+
+    const [startHour = 0, startMin = 0] = avail.startTime.split(':').map(Number);
+    const [endHour = 0, endMin = 0] = avail.endTime.split(':').map(Number);
+
+    let current = new Date(date);
+    current.setHours(startHour, startMin, 0, 0);
+
+    const endBound = new Date(date);
+    endBound.setHours(endHour, endMin, 0, 0);
+
+    while (current.getTime() < endBound.getTime()) {
+      const slotEnd = addMinutes(current, avail.slotDuration);
+      if (slotEnd.getTime() > endBound.getTime()) break;
+
+      if (current.getTime() > Date.now()) {
+        slots.push({ startTime: new Date(current), endTime: slotEnd });
+      }
+
+      current = slotEnd;
+    }
+  }
+
+  return slots;
+}
 
 export function AppointmentsPage(): React.JSX.Element {
   const { accessToken, user } = useAuth();
@@ -52,8 +88,12 @@ export function AppointmentsPage(): React.JSX.Element {
     isOpen: false,
     appointment: null,
   });
-  const [rescheduleStart, setRescheduleStart] = useState('');
-  const [rescheduleEnd, setRescheduleEnd] = useState('');
+  const [summaryModal, setSummaryModal] = useState<SummaryModalState>({
+    isOpen: false,
+    appointment: null,
+  });
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [selectedRescheduleSlot, setSelectedRescheduleSlot] = useState<AppointmentSlot | null>(null);
 
   const queryKey = ['appointments', 'list', accessToken, page, statusFilter];
 
@@ -70,6 +110,20 @@ export function AppointmentsPage(): React.JSX.Element {
 
   const appointments = data?.data ?? [];
   const meta = data?.meta;
+  const rescheduleAppointment = rescheduleModal.appointment;
+
+  const { data: rescheduleAvailabilityData, isLoading: rescheduleAvailabilityLoading } = useQuery({
+    queryKey: ['availability', 'reschedule', rescheduleAppointment?.doctorId, accessToken],
+    queryFn: () =>
+      api.doctorAvailability(accessToken!, rescheduleAppointment!.doctorId, { isActive: true }),
+    enabled: accessToken !== null && rescheduleAppointment !== null,
+  });
+
+  const rescheduleAvailability = rescheduleAvailabilityData?.data ?? [];
+  const rescheduleSlots = generateSlots(rescheduleAvailability, rescheduleDate);
+  const minRescheduleDate = new Date();
+  minRescheduleDate.setDate(minRescheduleDate.getDate() + 1);
+  const minRescheduleDateString = minRescheduleDate.toISOString().slice(0, 10);
 
   const cancelMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
@@ -89,8 +143,8 @@ export function AppointmentsPage(): React.JSX.Element {
     onSuccess: () => {
       notify('Appointment rescheduled successfully.', 'success');
       setRescheduleModal({ isOpen: false, appointment: null });
-      setRescheduleStart('');
-      setRescheduleEnd('');
+      setRescheduleDate('');
+      setSelectedRescheduleSlot(null);
       void queryClient.invalidateQueries({ queryKey: ['appointments'] });
     },
     onError: (e) => notify(e instanceof Error ? e.message : 'Failed to reschedule.', 'error'),
@@ -113,6 +167,9 @@ export function AppointmentsPage(): React.JSX.Element {
 
   const canUpdateStatus = (appt: Appointment): boolean =>
     (user?.role === 'DOCTOR' || user?.role === 'ADMIN') && appt.status === 'CONFIRMED';
+
+  const canViewSummary = (appt: Appointment): boolean =>
+    appt.preVisitSummary !== null || appt.postVisitSummary !== null || appt.symptoms !== null;
 
   return (
     <div className="space-y-6">
@@ -213,11 +270,21 @@ export function AppointmentsPage(): React.JSX.Element {
                             variant="secondary"
                             onClick={() => {
                               setRescheduleModal({ isOpen: true, appointment: appt });
-                              setRescheduleStart('');
-                              setRescheduleEnd('');
+                              setRescheduleDate('');
+                              setSelectedRescheduleSlot(null);
                             }}
                           >
                             Reschedule
+                          </Button>
+                        )}
+                        {canViewSummary(appt) && (
+                          <Button
+                            leftIcon={<Brain className="h-3 w-3" />}
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setSummaryModal({ isOpen: true, appointment: appt })}
+                          >
+                            Summary
                           </Button>
                         )}
                         {canUpdateStatus(appt) && (
@@ -309,6 +376,66 @@ export function AppointmentsPage(): React.JSX.Element {
         />
       </Modal>
 
+      <Modal
+        isOpen={summaryModal.isOpen}
+        size="lg"
+        title="Appointment Summary"
+        onClose={() => setSummaryModal({ isOpen: false, appointment: null })}
+      >
+        {summaryModal.appointment !== null && (
+          <div className="space-y-5">
+            {summaryModal.appointment.symptoms !== null && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <h3 className="text-sm font-semibold text-slate-900">Patient symptoms</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                  {summaryModal.appointment.symptoms.symptoms}
+                </p>
+                <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                  <span>Duration: {summaryModal.appointment.symptoms.duration ?? 'Not provided'}</span>
+                  <span>Severity: {summaryModal.appointment.symptoms.severity ?? 'Not provided'}</span>
+                </div>
+                {summaryModal.appointment.symptoms.additionalNotes !== null && (
+                  <p className="mt-3 whitespace-pre-wrap text-xs text-slate-500">
+                    {summaryModal.appointment.symptoms.additionalNotes}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {summaryModal.appointment.preVisitSummary !== null && (
+              <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Doctor-facing pre-visit summary</h3>
+                  <StatusBadge status={summaryModal.appointment.status} />
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                  {summaryModal.appointment.preVisitSummary.content}
+                </p>
+                {summaryModal.appointment.preVisitSummary.chiefComplaint !== null && (
+                  <p className="mt-3 text-xs text-slate-500">
+                    Chief complaint: {summaryModal.appointment.preVisitSummary.chiefComplaint}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {summaryModal.appointment.postVisitSummary !== null && (
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
+                <h3 className="text-sm font-semibold text-slate-900">Patient-friendly visit summary</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                  {summaryModal.appointment.postVisitSummary.content}
+                </p>
+                {summaryModal.appointment.postVisitSummary.followUpGuidance !== null && (
+                  <p className="mt-3 whitespace-pre-wrap text-xs text-slate-500">
+                    {summaryModal.appointment.postVisitSummary.followUpGuidance}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
       {/* Reschedule Modal */}
       <Modal
         description="Select a new date and time for this appointment."
@@ -316,19 +443,23 @@ export function AppointmentsPage(): React.JSX.Element {
           <>
             <Button
               variant="secondary"
-              onClick={() => setRescheduleModal({ isOpen: false, appointment: null })}
+              onClick={() => {
+                setRescheduleModal({ isOpen: false, appointment: null });
+                setRescheduleDate('');
+                setSelectedRescheduleSlot(null);
+              }}
             >
               Cancel
             </Button>
             <Button
-              disabled={rescheduleStart === '' || rescheduleEnd === ''}
+              disabled={selectedRescheduleSlot === null}
               loading={rescheduleMutation.isPending}
               onClick={() => {
-                if (rescheduleModal.appointment !== null) {
+                if (rescheduleAppointment !== null && selectedRescheduleSlot !== null) {
                   void rescheduleMutation.mutate({
-                    id: rescheduleModal.appointment.id,
-                    startTime: new Date(rescheduleStart).toISOString(),
-                    endTime: new Date(rescheduleEnd).toISOString(),
+                    id: rescheduleAppointment.id,
+                    startTime: selectedRescheduleSlot.startTime.toISOString(),
+                    endTime: selectedRescheduleSlot.endTime.toISOString(),
                   });
                 }
               }}
@@ -339,35 +470,65 @@ export function AppointmentsPage(): React.JSX.Element {
         }
         isOpen={rescheduleModal.isOpen}
         title="Reschedule Appointment"
-        onClose={() => setRescheduleModal({ isOpen: false, appointment: null })}
+        onClose={() => {
+          setRescheduleModal({ isOpen: false, appointment: null });
+          setRescheduleDate('');
+          setSelectedRescheduleSlot(null);
+        }}
       >
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="reschedule-start">
-              New start time
+            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="reschedule-date">
+              New appointment date
             </label>
             <input
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
-              id="reschedule-start"
-              min={new Date().toISOString().slice(0, 16)}
-              type="datetime-local"
-              value={rescheduleStart}
-              onChange={(e) => setRescheduleStart(e.target.value)}
+              id="reschedule-date"
+              min={minRescheduleDateString}
+              type="date"
+              value={rescheduleDate}
+              onChange={(event) => {
+                setRescheduleDate(event.target.value);
+                setSelectedRescheduleSlot(null);
+              }}
             />
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="reschedule-end">
-              New end time
-            </label>
-            <input
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
-              id="reschedule-end"
-              min={rescheduleStart !== '' ? rescheduleStart : new Date().toISOString().slice(0, 16)}
-              type="datetime-local"
-              value={rescheduleEnd}
-              onChange={(e) => setRescheduleEnd(e.target.value)}
-            />
-          </div>
+
+          {rescheduleAvailabilityLoading ? (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <Skeleton key={index} className="h-10" />
+              ))}
+            </div>
+          ) : rescheduleDate !== '' && rescheduleSlots.length === 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+              No valid slots are available on this date. Choose a date that matches the doctor&apos;s availability.
+            </div>
+          ) : rescheduleDate !== '' ? (
+            <div>
+              <p className="mb-3 text-sm font-medium text-slate-600">
+                Select one of the doctor&apos;s configured slots
+              </p>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {rescheduleSlots.map((slot) => (
+                  <button
+                    key={slot.startTime.toISOString()}
+                    className={`rounded-xl border py-2.5 text-sm font-medium transition ${
+                      selectedRescheduleSlot?.startTime.getTime() === slot.startTime.getTime()
+                        ? 'border-brand-500 bg-brand-600 text-white'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-brand-300 hover:bg-brand-50'
+                    }`}
+                    type="button"
+                    onClick={() => setSelectedRescheduleSlot(slot)}
+                  >
+                    {slot.startTime.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Select a date to see valid reschedule slots.</p>
+          )}
         </div>
       </Modal>
     </div>

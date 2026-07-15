@@ -73,6 +73,25 @@ export type Appointment = Readonly<{
   endTime: string;
   status: AppointmentStatus;
   cancellationReason: string | null;
+  symptoms: {
+    symptoms: string;
+    duration: string | null;
+    severity: string | null;
+    additionalNotes: string | null;
+  } | null;
+  preVisitSummary: {
+    status: string;
+    content: string;
+    urgencyLevel: string | null;
+    chiefComplaint: string | null;
+    failureReason: string | null;
+  } | null;
+  postVisitSummary: {
+    status: string;
+    content: string;
+    followUpGuidance: string | null;
+    failureReason: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }>;

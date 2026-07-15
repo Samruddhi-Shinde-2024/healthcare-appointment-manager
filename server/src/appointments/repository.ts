@@ -1,11 +1,12 @@
 import {
   AppointmentStatus,
-  DayOfWeek,
   type Prisma,
   type PrismaClient,
+  type LLMSummaryType,
   type UserRole,
 } from '@prisma/client';
 
+import { appointmentFitsAvailability, toClinicDateKey } from '../availability/time.js';
 import type { PaginationOptions } from '../common/pagination.js';
 import { toSkip } from '../common/pagination.js';
 import { ApplicationError } from '../errors/application-error.js';
@@ -22,6 +23,8 @@ const appointmentInclude = {
       user: true,
     },
   },
+  summaries: true,
+  symptoms: true,
 } satisfies Prisma.AppointmentInclude;
 
 export type AppointmentRecord = Prisma.AppointmentGetPayload<{
@@ -37,6 +40,13 @@ export type AppointmentListFilters = Readonly<{
   status?: AppointmentStatus;
   doctorId?: string;
   patientId?: string;
+}>;
+
+type AppointmentSymptomSubmission = Readonly<{
+  symptoms: string;
+  duration?: string | undefined;
+  severity?: string | undefined;
+  additionalNotes?: string | undefined;
 }>;
 
 export type BookingValidationContext = Readonly<{
@@ -124,6 +134,7 @@ export class AppointmentsRepository {
       startTime: Date;
       endTime: Date;
       actorId: string;
+      symptomSubmission?: AppointmentSymptomSubmission;
     }>,
   ): Promise<AppointmentRecord> {
     return this.database.$transaction(
@@ -238,6 +249,7 @@ export class AppointmentsRepository {
       startTime: Date;
       endTime: Date;
       actorId: string;
+      symptomSubmission?: AppointmentSymptomSubmission;
     }>,
   ): Promise<AppointmentRecord> {
     await this.validateBookingInsideTransaction(transaction, input);
@@ -249,6 +261,26 @@ export class AppointmentsRepository {
         startTime: input.startTime,
         endTime: input.endTime,
         status: AppointmentStatus.CONFIRMED,
+        ...(input.symptomSubmission === undefined
+          ? {}
+          : {
+              symptoms: {
+                create: {
+                  symptoms: input.symptomSubmission.symptoms,
+                  ...(input.symptomSubmission.duration === undefined
+                    ? {}
+                    : { duration: input.symptomSubmission.duration }),
+                  ...(input.symptomSubmission.severity === undefined
+                    ? {}
+                    : { severity: input.symptomSubmission.severity }),
+                  ...(input.symptomSubmission.additionalNotes === undefined
+                    ? {}
+                    : { additionalNotes: input.symptomSubmission.additionalNotes }),
+                  createdBy: input.actorId,
+                  updatedBy: input.actorId,
+                },
+              },
+            }),
         createdBy: input.actorId,
         updatedBy: input.actorId,
       },
@@ -296,7 +328,15 @@ export class AppointmentsRepository {
       transaction.appointment.findFirst({
         where: {
           doctorId: input.doctorId,
-          startTime: input.startTime,
+          status: {
+            in: [AppointmentStatus.HELD, AppointmentStatus.CONFIRMED],
+          },
+          startTime: {
+            lt: input.endTime,
+          },
+          endTime: {
+            gt: input.startTime,
+          },
           ...(input.excludedAppointmentId === undefined
             ? {}
             : {
@@ -381,64 +421,17 @@ export class AppointmentsRepository {
 
 }
 
+export function findSummaryByType(
+  appointment: AppointmentRecord,
+  type: LLMSummaryType,
+): AppointmentRecord['summaries'][number] | null {
+  return appointment.summaries.find((summary) => summary.type === type) ?? null;
+}
+
 function appointmentDateFallsWithinLeave(
   appointmentStart: Date,
   leave: Readonly<{ startDate: Date; endDate: Date }>,
 ): boolean {
-  const appointmentDate = toUtcDateKey(appointmentStart);
-  return appointmentDate >= toUtcDateKey(leave.startDate) && appointmentDate <= toUtcDateKey(leave.endDate);
-}
-
-function appointmentFitsAvailability(
-  input: Readonly<{ startTime: Date; endTime: Date }>,
-  availability: Readonly<{
-    dayOfWeek: DayOfWeek;
-    startTime: Date;
-    endTime: Date;
-    slotDuration: number;
-  }>,
-): boolean {
-  const appointmentDuration = differenceInMinutes(input.startTime, input.endTime);
-
-  return (
-    toDayOfWeek(input.startTime) === availability.dayOfWeek &&
-    appointmentDuration === availability.slotDuration &&
-    toMinutesSinceMidnight(input.startTime) >= toMinutesSinceMidnight(availability.startTime) &&
-    toMinutesSinceMidnight(input.endTime) <= toMinutesSinceMidnight(availability.endTime)
-  );
-}
-
-function differenceInMinutes(startTime: Date, endTime: Date): number {
-  return Math.round((endTime.getTime() - startTime.getTime()) / 60_000);
-}
-
-function toMinutesSinceMidnight(value: Date): number {
-  return value.getUTCHours() * 60 + value.getUTCMinutes();
-}
-
-function toUtcDateKey(value: Date): string {
-  return value.toISOString().slice(0, 10);
-}
-
-function toDayOfWeek(value: Date): DayOfWeek {
-  const day = value.getUTCDay();
-
-  switch (day) {
-    case 0:
-      return DayOfWeek.SUNDAY;
-    case 1:
-      return DayOfWeek.MONDAY;
-    case 2:
-      return DayOfWeek.TUESDAY;
-    case 3:
-      return DayOfWeek.WEDNESDAY;
-    case 4:
-      return DayOfWeek.THURSDAY;
-    case 5:
-      return DayOfWeek.FRIDAY;
-    case 6:
-      return DayOfWeek.SATURDAY;
-    default:
-      throw new ApplicationError('Invalid appointment day.', 400, 'INVALID_APPOINTMENT_DAY');
-  }
+  const appointmentDate = toClinicDateKey(appointmentStart);
+  return appointmentDate >= toClinicDateKey(leave.startDate) && appointmentDate <= toClinicDateKey(leave.endDate);
 }

@@ -31,7 +31,12 @@ export function SettingsPage(): React.JSX.Element {
       window.location.href = res.data.authorizationUrl;
     } catch (err) {
       if (err instanceof ApiError) {
-        notify(err.message, 'error');
+        notify(
+          err.code === 'GOOGLE_NOT_CONFIGURED'
+            ? 'Google Calendar is ready, but OAuth credentials are not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI on the server.'
+            : err.message,
+          'error',
+        );
       } else {
         notify('Failed to initiate Google Calendar connection.', 'error');
       }

@@ -171,7 +171,7 @@ export class AiService {
   private async getAuthorizedAppointment(
     appointmentId: string,
     actor: AuthenticatedUser,
-    summaryType: LLMSummaryType,
+    _summaryType: LLMSummaryType,
   ): Promise<AiAppointmentContext> {
     const appointment = await this.aiRepository.findAppointmentContext(appointmentId);
 
@@ -187,7 +187,7 @@ export class AiService {
       return appointment;
     }
 
-    if (summaryType === LLMSummaryType.POST_VISIT && actor.role === UserRole.PATIENT && appointment.patient.userId === actor.id) {
+    if (actor.role === UserRole.PATIENT && appointment.patient.userId === actor.id) {
       return appointment;
     }
 

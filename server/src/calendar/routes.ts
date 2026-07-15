@@ -8,7 +8,7 @@ import { CalendarController } from './controller.js';
 import { GoogleCalendarProvider } from './provider.js';
 import { CalendarRepository } from './repository.js';
 import { CalendarService } from './service.js';
-import { googleCalendarCallbackSchema } from './validation.js';
+import { googleCalendarCallbackQuerySchema, googleCalendarCallbackSchema } from './validation.js';
 
 const calendarRepository = new CalendarRepository(prisma);
 const calendarProvider = new GoogleCalendarProvider();
@@ -18,6 +18,11 @@ const calendarRoles: PrismaUserRole[] = [UserRole.ADMIN, UserRole.DOCTOR, UserRo
 
 export const calendarRouter: ExpressRouter = Router();
 
+calendarRouter.get(
+  '/google/callback',
+  validateRequest({ query: googleCalendarCallbackQuerySchema }),
+  calendarController.completeGoogleBrowserCallback,
+);
 calendarRouter.use(authenticate(), authorize(...calendarRoles));
 calendarRouter.get('/google/connect', calendarController.connectGoogle);
 calendarRouter.post(
