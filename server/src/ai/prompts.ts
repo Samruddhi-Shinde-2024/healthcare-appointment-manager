@@ -63,8 +63,14 @@ export function buildPostVisitPrompt(appointment: AiAppointmentContext): Summary
   };
 }
 
+// export function fallbackSummaryContent(type: LLMSummaryType): string {
+//   return type === 'PRE_VISIT'
+//     ? 'AI pre-visit summary is currently unavailable.'
+//     : 'AI post-visit summary is currently unavailable.';
+// }
+
 export function fallbackSummaryContent(type: LLMSummaryType): string {
   return type === 'PRE_VISIT'
-    ? 'AI pre-visit summary is currently unavailable.'
-    : 'AI post-visit summary is currently unavailable.';
+    ? 'AI pre-visit summary is unavailable. Configure the AI provider API key to enable this feature.'
+    : 'AI post-visit summary is unavailable. Configure the AI provider API key to enable this feature.';
 }
