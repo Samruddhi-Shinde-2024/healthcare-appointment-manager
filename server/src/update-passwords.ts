@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const passwordHash =
-    '$2b$12$U1h8mPcis/2IGqAtdrBePuF5Vgie..tHpynWUMTBG7xGmdxI7v0E2';
+    '$2b$12$UXUgDzDX4ZY4caID.ijMRugtzKuixTOl81UAzL4sEj.Qdgc4v2Uq6';
 
   const emails = [
     'admin@healthcare.local',

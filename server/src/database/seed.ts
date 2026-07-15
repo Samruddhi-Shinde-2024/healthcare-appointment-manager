@@ -12,7 +12,7 @@ const prisma = new PrismaClient();
 // const DEVELOPMENT_PASSWORD_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
 
 // Temp
-const DEVELOPMENT_PASSWORD_HASH = '$2b$12$U1h8mPcis/2IGqAtdrBePuF5Vgie..tHpynWUMTBG7xGmdxI7v0E2';
+const DEVELOPMENT_PASSWORD_HASH = '$2b$12$UXUgDzDX4ZY4caID.ijMRugtzKuixTOl81UAzL4sEj.Qdgc4v2Uq6';
 
 type AvailabilitySeed = Readonly<{
   id: string;
