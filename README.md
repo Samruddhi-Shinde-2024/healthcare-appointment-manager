@@ -69,6 +69,32 @@ Integrations:
 - SMTP configuration tracked through email logs
 - Google Calendar API via provider abstraction
 
+## Database Schema
+
+The application uses PostgreSQL with Prisma ORM. The major entities are:
+
+```text
+User
+│
+├── PatientProfile
+├── DoctorProfile
+│     ├── DoctorAvailability
+│     └── DoctorLeave
+│
+Appointment
+│
+├── SymptomSubmission
+├── LLMSummary
+├── EmailLog
+├── Notification
+├── CalendarConnection
+├── CalendarEvent
+├── MedicationReminder
+└── BackgroundJob
+```
+
+Relationships are managed through Prisma models with foreign keys and transactional operations to ensure data consistency.
+
 ## Folder Structure
 
 ```text
@@ -134,6 +160,30 @@ Important variables:
 - `CLIENT_ORIGIN`: allowed CORS origin for the frontend.
 - `VITE_API_URL`: frontend API base URL.
 
+## Google Calendar Setup
+
+1. Create a project in Google Cloud Console.
+2. Enable the Google Calendar API.
+3. Configure the OAuth Consent Screen.
+4. Create OAuth Client credentials.
+5. Add the following redirect URI:
+
+```
+http://localhost:4000/calendar/google/callback
+```
+
+6. Copy the generated credentials into your `.env` file:
+
+```
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=
+```
+
+7. Restart the backend server.
+
+8. Open **Settings → Google Calendar** inside the application and click **Connect**.
+
 ## Database Setup
 
 Generate Prisma Client:
@@ -177,6 +227,24 @@ pnpm run lint
 pnpm run typecheck
 ```
 
+## Hosted Application
+
+Frontend
+
+https://your-vercel-url.vercel.app
+
+Backend
+
+https://your-render-url.onrender.com
+
+Swagger
+
+https://your-render-url.onrender.com/docs
+
+OpenAPI JSON
+
+https://your-render-url.onrender.com/docs/openapi.json
+
 ## API Documentation
 
 After starting the server, open:
@@ -210,6 +278,42 @@ Protected endpoints require:
 
 ```http
 Authorization: Bearer <access-token>
+```
+
+## LLM Prompts
+
+### Pre-Visit Summary Prompt
+
+```text
+You are an experienced clinical assistant.
+
+Analyze the patient's submitted symptoms and generate a concise doctor-facing summary.
+
+Include:
+- Chief complaint
+- Possible urgency
+- Key observations
+- Suggested follow-up questions
+
+Do not diagnose diseases.
+Keep the summary professional and concise.
+```
+
+### Post-Visit Summary Prompt
+
+```text
+You are an experienced medical assistant.
+
+Generate a patient-friendly visit summary.
+
+Include:
+- Diagnosis (if available)
+- Medications prescribed
+- Follow-up recommendations
+- Lifestyle advice
+- Warning signs requiring urgent medical attention.
+
+Use simple language suitable for patients.
 ```
 
 ## Key Design Decisions
@@ -254,11 +358,28 @@ Calendar integration uses a provider abstraction. The current implementation is 
 - Role-based authorization is centralized and reusable.
 - Helmet, CORS, request ids, and centralized error responses are configured globally.
 
+## Deployment
+
+Recommended deployment stack:
+
+- Frontend: Vercel
+- Backend: Render or Railway
+- Database: PostgreSQL
+- Cache: Redis
+- Email Service: SMTP
+- AI Provider: OpenAI API
+- Calendar Integration: Google Calendar API
+
+The application is designed so that environment variables can be updated without requiring source code changes.
+
 ## Future Improvements
 
-- Move background job execution to dedicated worker processes.
-- Add automated integration tests for appointment concurrency and leave conflicts.
-- Add calendar token refresh support.
-- Add retry workers for failed email/calendar jobs.
-- Add frontend screens for admin, doctor, patient, and reminder workflows.
-- Add deployment-specific observability dashboards.
+- Dedicated BullMQ worker processes for background jobs.
+- Automatic retry mechanism for failed email and calendar jobs.
+- Refresh-token support for Google OAuth.
+- Redis-based temporary slot hold mechanism.
+- Integration testing for appointment booking concurrency.
+- SMS and WhatsApp notifications.
+- Real-time appointment updates using WebSockets.
+- Monitoring dashboards using Grafana/Prometheus.
+- Docker Compose production deployment.
