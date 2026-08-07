@@ -1,4 +1,4 @@
-# Healthcare Appointment Manager
+# 🏥 Healthcare Appointment Manager
 
 <p align="center">
 
