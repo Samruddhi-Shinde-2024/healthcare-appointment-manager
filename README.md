@@ -1,5 +1,25 @@
 # Healthcare Appointment Manager
 
+<p align="center">
+
+<img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB"/>
+
+<img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white"/>
+
+<img src="https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white"/>
+
+<img src="https://img.shields.io/badge/Prisma-2D3748?style=for-the-badge&logo=prisma&logoColor=white"/>
+
+<img src="https://img.shields.io/badge/PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white"/>
+
+<img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white"/>
+
+<img src="https://img.shields.io/badge/BullMQ-FFB000?style=for-the-badge"/>
+
+<img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white"/>
+
+</p>
+
 Healthcare Appointment Manager is a production-oriented full-stack assignment for managing appointments, doctor availability, leave, AI visit summaries, notifications, email delivery records, Google Calendar synchronization, background jobs, and medication reminders.
 
 The project is intentionally structured like a handoff-ready engineering codebase rather than a demo. It uses strict TypeScript, layered backend modules, Prisma-backed relational data modeling, centralized validation/error handling, and role-based access control.
@@ -24,6 +44,8 @@ Patient
 Create a new account using the registration page.
 > These are development/demo credentials seeded automatically for evaluation purposes.
 
+---
+
 ## Features
 
 - Patient registration and JWT login with refresh-token rotation.
@@ -39,25 +61,46 @@ Create a new account using the registration page.
 - Medication reminder creation, scheduling, and status updates.
 - Swagger/OpenAPI documentation served by the API.
 
-## Architecture
+---
+
+# 🏗️ System Architecture
+
+<p align="center">
+<img src="docs/architecture.png" width="100%">
+</p>
+
+---
+
+## ⚙️ Backend Architecture
 
 The backend follows a feature-based layered architecture:
 
 ```text
-routes -> controllers -> services -> repositories -> Prisma/PostgreSQL
+Routes
+   ↓
+Controllers
+   ↓
+Services
+   ↓
+Repositories
+   ↓
+Prisma ORM
+   ↓
+PostgreSQL
 ```
 
-Supporting layers provide:
+Supporting layers:
 
-- authentication and authorization middleware;
-- Zod request validation;
-- centralized `ApplicationError` handling;
-- Prisma client configuration;
-- Winston logging;
-- durable job metadata;
-- provider abstractions for replaceable integrations such as calendar sync.
+- JWT Authentication
+- Role-based Authorization
+- Zod Validation
+- ApplicationError Handling
+- Winston Logging
+- Redis Cache
+- BullMQ Background Jobs
+- Provider Abstractions (Google Calendar, AI)
 
-The frontend is a Vite + React + TypeScript application. The shared package contains cross-workspace types/constants.
+---
 
 ## Tech Stack
 
@@ -89,6 +132,8 @@ Integrations:
 - SMTP configuration tracked through email logs
 - Google Calendar API via provider abstraction
 
+---
+
 ## Database Schema
 
 The application uses PostgreSQL with Prisma ORM. The major entities are:
@@ -114,6 +159,8 @@ Appointment
 ```
 
 Relationships are managed through Prisma models with foreign keys and transactional operations to ensure data consistency.
+
+---
 
 ## Folder Structure
 
@@ -143,6 +190,8 @@ docs/                   Architecture and database design notes
 docker/                 Dockerfiles and nginx config
 ```
 
+---
+
 ## Installation
 
 Prerequisites:
@@ -167,7 +216,7 @@ Copy `.env.example` to `.env` and update the values:
 cp .env.example .env
 ```
 
-Important variables:
+Key environment variables:
 
 - `DATABASE_URL`: PostgreSQL connection string used by Prisma.
 - `REDIS_URL`: Redis connection string.
@@ -227,6 +276,8 @@ pnpm --filter @healthcare/server run prisma:seed
 
 The seed script is idempotent and creates development users, doctors, availability, leave records, and patients.
 
+---
+
 ## Running Locally
 
 Start the full workspace in development mode:
@@ -242,12 +293,13 @@ The development seed script creates:
 - Doctor availability
 - Doctor leave records
 
-Run:
+Run the seed script (if required):
 
 ```bash
 pnpm --filter @healthcare/server run prisma:seed
+```
 
-Build all packages:
+Build the workspace:
 
 ```bash
 pnpm run build
@@ -260,23 +312,7 @@ pnpm run lint
 pnpm run typecheck
 ```
 
-## Hosted Application
-
-Frontend
-
-https://your-vercel-url.vercel.app
-
-Backend
-
-https://your-render-url.onrender.com
-
-Swagger
-
-https://your-render-url.onrender.com/docs
-
-OpenAPI JSON
-
-https://your-render-url.onrender.com/docs/openapi.json
+---
 
 ## API Documentation
 
@@ -284,6 +320,8 @@ After starting the server, open:
 
 - Swagger UI: `http://localhost:4000/docs`
 - OpenAPI JSON: `http://localhost:4000/docs/openapi.json`
+
+---
 
 ### Production Backend
 
@@ -320,45 +358,11 @@ Protected endpoints require:
 Authorization: Bearer <access-token>
 ```
 
-## LLM Prompts
-
-### Pre-Visit Summary Prompt
-
-```text
-You are an experienced clinical assistant.
-
-Analyze the patient's submitted symptoms and generate a concise doctor-facing summary.
-
-Include:
-- Chief complaint
-- Possible urgency
-- Key observations
-- Suggested follow-up questions
-
-Do not diagnose diseases.
-Keep the summary professional and concise.
-```
-
-### Post-Visit Summary Prompt
-
-```text
-You are an experienced medical assistant.
-
-Generate a patient-friendly visit summary.
-
-Include:
-- Diagnosis (if available)
-- Medications prescribed
-- Follow-up recommendations
-- Lifestyle advice
-- Warning signs requiring urgent medical attention.
-
-Use simple language suitable for patients.
-```
+---
 
 ## Key Design Decisions
 
-### Transaction Safety
+### 🔒 Transaction Safety
 
 Appointment booking and rescheduling use Prisma transactions and the database uniqueness constraint on doctor/start time. The service validates:
 
@@ -372,21 +376,21 @@ Appointment booking and rescheduling use Prisma transactions and the database un
 
 This makes double-booking prevention a database-backed invariant rather than only an application-level check.
 
-### AI Integration Strategy
+### 🤖 AI Integration Strategy
 
 AI prompts live outside controllers. Services read symptom submissions or visit/prescription context, call the configured model, and persist outputs in `LLMSummary`. Failures are gracefully recorded as failed summaries so appointment workflows do not collapse when the AI provider is unavailable.
 If no AI provider credentials are configured, the application stores a fallback summary instead of failing the appointment workflow.
 
-### Email and Notifications
+### 📧 Email and Notifications
 
 Email delivery attempts are persisted to `EmailLog`; in-app notifications are persisted to `Notification`. Appointment workflows trigger these services as side effects and log failures without rolling back successful appointment transactions.
 SMTP credentials are intentionally excluded from the repository. Configure SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and EMAIL_FROM to enable email delivery.
 
-### Background Job Processing
+### ⚙️ Background Job Processing
 
 The `BackgroundJob` model is used as a durable job ledger for AI summaries, email delivery, appointment reminders, calendar synchronization, medication reminders, retries, and operational status tracking. The implementation keeps job state transitions explicit and stores attempts, schedule time, and last error metadata.
 
-### Google Calendar
+### 📅 Google Calendar
 
 Calendar integration uses a provider abstraction. The current implementation is Google-specific, but appointment services depend on a calendar service rather than Google API details. OAuth tokens are encrypted before persistence and are never returned in API responses.
 Google Calendar synchronization requires:
@@ -397,7 +401,7 @@ Google Calendar synchronization requires:
 
 Without these credentials the application continues functioning while disabling calendar synchronization.
 
-### Security
+### 🛡️ Security
 
 - JWT payloads contain only user id and role.
 - Passwords are hashed with bcrypt.
@@ -409,7 +413,7 @@ Without these credentials the application continues functioning while disabling 
 
 ## Deployment
 
-Recommended deployment stack:
+Production Deployment:
 
 - Frontend: Vercel
 - Backend: Render or Railway
@@ -471,7 +475,7 @@ https://healthcare-appointment-manager-zfsp.onrender.com
 
 ![Admin Dashboard](docs/screenshots/admin-dashboard.png)
 
-## Notes
+## Important Notes
 
 Some integrations depend on external providers.
 
