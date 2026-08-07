@@ -66,7 +66,7 @@ Create a new account using the registration page.
 # 🏗️ System Architecture
 
 <p align="center">
-<img src="docs/architecture.png" width="100%">
+<img src="docs/screenshots/architecture.png" width="100%">
 </p>
 
 ---
