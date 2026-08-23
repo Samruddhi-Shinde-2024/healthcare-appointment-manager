@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { ToastProvider } from './context/ToastContext';
 import { AuthProvider } from './context/AuthContext';
 import { Router } from './Router';
@@ -34,6 +35,7 @@ export function App(): React.JSX.Element {
           </BrowserRouter>
         </AuthProvider>
       </ToastProvider>
+      <Analytics />
     </QueryClientProvider>
   );
 }
